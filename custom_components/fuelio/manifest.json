@@ -1,0 +1,12 @@
+{
+  "domain": "fuelio",
+  "name": "Fuelio",
+  "version": "0.1.0.dev1",
+  "codeowners": ["@Jocke1970"],
+  "config_flow": true,
+  "documentation": "https://github.com/Jocke1970/HA-Fuelio",
+  "issue_tracker": "https://github.com/Jocke1970/HA-Fuelio/issues",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": []
+}
