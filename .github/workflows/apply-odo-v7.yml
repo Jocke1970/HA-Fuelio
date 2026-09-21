@@ -1,0 +1,34 @@
+name: Apply Fuelio odometer v7 once
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/apply-odo-v7.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply once, verify all tests, and commit only on success
+        run: |
+          set -euo pipefail
+          python tools/apply_odometer_v7.py
+          python tools/finish_odometer_v7.py
+          python -m compileall -q custom_components tests
+          python -m unittest discover -s tests -v
+          node --check custom_components/fuelio/www/ha-fuelio-card.js
+          node tests/test_frontend.mjs
+          node tests/test_frontend_real_ids.mjs
+          node tests/test_cost_frontend.mjs
+          git config user.name 'fuelio-ci'
+          git config user.email 'fuelio-ci@users.noreply.github.com'
+          git add README.md RELEASE_NOTES.md custom_components/fuelio/parser.py custom_components/fuelio/sensor.py custom_components/fuelio/www/ha-fuelio-card.js custom_components/fuelio/manifest.json tests/test_cost_analytics.py tests/test_cost_frontend.mjs
+          git commit -m 'fix(dev): odometer-based period ratios and current-month overview'
+          git push origin HEAD:dev
