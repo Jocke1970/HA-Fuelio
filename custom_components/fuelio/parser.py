@@ -1,4 +1,4 @@
-"""Parse Fuelio's multi-section sync CSV, without publishing raw vehicle records."""
+"""Parse Fuelio's multi-section sync CSV without exposing raw vehicle records."""
 from __future__ import annotations
 
 import csv
@@ -12,11 +12,12 @@ from zipfile import BadZipFile, ZipFile
 MAX_ZIP_BYTES = 32 * 1024 * 1024
 MAX_CSV_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 100_000
+MAX_MONTHS_IN_ATTRIBUTES = 120  # Bound recorder/state attribute size; newest ten years.
 
 
 @dataclass(frozen=True, slots=True)
 class FuelioSnapshot:
-    """Aggregate values only: no plate, VIN, notes, route or GPS coordinates."""
+    """Aggregate values only: no plate, VIN, notes, trip details or GPS."""
     vehicle_name: str
     trip_count: int
     trip_distance_km: float
@@ -37,6 +38,17 @@ class FuelioSnapshot:
     total_actual_cost: float
     last_trip_date: date | None
     latest_odometer_km: float | None
+    fuel_price_min_year: float | None
+    fuel_price_max_year: float | None
+    fuel_price_min_all: float | None
+    fuel_price_max_all: float | None
+    consumption_min_year: float | None
+    consumption_max_year: float | None
+    consumption_min_all: float | None
+    consumption_max_all: float | None
+    record_dates: dict[str, str]
+    monthly_cost_history: tuple[dict[str, float | str], ...]
+    monthly_history_truncated: bool
 
 
 def _number(raw: str, *, default: Decimal | None = None) -> Decimal | None:
@@ -100,8 +112,17 @@ def _section_rows(text: str) -> dict[str, list[dict[str, str]]]:
     return sections
 
 
+def _record(records: list[tuple[Decimal, date]], *, lowest: bool) -> tuple[Decimal | None, str | None]:
+    """Pick a real positive observation; on ties use its newest date."""
+    if not records:
+        return None, None
+    boundary = (min if lowest else max)(value for value, _ in records)
+    day = max(day for value, day in records if value == boundary)
+    return boundary, day.isoformat()
+
+
 def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
-    """Build a summary from the metric Fuelio export format."""
+    """Build aggregates from a metric Fuelio export; never preserve source rows."""
     today = today or date.today()
     sections = _section_rows(text)
     if len(sections.get("Vehicle", [])) != 1:
@@ -109,9 +130,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     if any(key not in sections for key in ("Log", "Costs", "TripLog")):
         raise ValueError("Missing Fuelio data section")
     vehicle = sections["Vehicle"][0]
-    # Vehicle.Name may contain the registration number. Never retain it in the snapshot.
-    name = "Fuelio vehicle"
-    # Zero represents the metric export observed in the supplied sample.
+    name = "Fuelio vehicle"  # Vehicle.Name could contain a registration; discard it.
     if vehicle.get("DistUnit") != "0" or vehicle.get("FuelUnit") != "0":
         raise ValueError("This version supports metric Fuelio backups only")
 
@@ -141,6 +160,12 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             if odo is not None and odo > 0 and day <= today:
                 odometers.append(odo)
 
+    # Monthly values are aggregate-only and capped before exposing as HA attributes.
+    monthly: dict[str, dict[str, Decimal]] = {}
+
+    def bucket(day: date) -> dict[str, Decimal]:
+        return monthly.setdefault(day.strftime("%Y-%m"), {"fuel": Decimal(0), "other": Decimal(0)})
+
     fuel_count = 0
     litres = Decimal(0)
     fuel_cost = Decimal(0)
@@ -149,6 +174,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     last_price: Decimal | None = None
     last_consumption: Decimal | None = None
     last_consumption_day: date | None = None
+    valid_prices: list[tuple[Decimal, date]] = []
+    valid_consumptions: list[tuple[Decimal, date]] = []
     for fillup in sections["Log"]:
         day = _date(fillup["Data"])
         volume = _nonnegative(fillup["Fuel (litres)"], default=Decimal(0))
@@ -159,19 +186,25 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             continue
         litres += volume
         fuel_cost += cost
+        bucket(day)["fuel"] += cost
         if (day.year, day.month) == (today.year, today.month):
             month_fuel_cost += cost
         odo = _nonnegative(fillup.get("Odo (km)", ""))
         if odo is not None and odo > 0:
             odometers.append(odo)
-        # A blank reading on the newest fill-up must not erase an older real reading.
         reported = _nonnegative(fillup.get("l/100km (optional)", ""))
         if reported is not None and (last_consumption_day is None or day > last_consumption_day):
             last_consumption_day = day
             last_consumption = reported
+        # Zero, empty or otherwise missing measurements are not fuel-price/consumption records.
+        if reported is not None and reported > 0:
+            valid_consumptions.append((reported, day))
+        price = _nonnegative(fillup.get("VolumePrice", ""))
+        effective_price = price if price is not None and price > 0 else (cost / volume if volume and cost else None)
+        if volume > 0 and effective_price is not None and effective_price > 0:
+            valid_prices.append((effective_price, day))
         if last_fillup is None or day > last_fillup:
             last_fillup = day
-            price = _nonnegative(fillup.get("VolumePrice", ""))
             last_price = price if price is not None and price > 0 else (cost / volume if volume else None)
 
     expense_count = 0
@@ -189,11 +222,35 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             upcoming += 1
             continue
         expenses += amount
+        bucket(day)["other"] += amount
         if (day.year, day.month) == (today.year, today.month):
             month_expenses += amount
 
     def rounded(value: Decimal, places: int = 2) -> float:
         return round(float(value), places)
+
+    extrema: dict[str, float | None] = {}
+    record_dates: dict[str, str] = {}
+    for prefix, records in (("fuel_price", valid_prices), ("consumption", valid_consumptions)):
+        this_year = [(value, day) for value, day in records if day.year == today.year]
+        for suffix, subset in (("year", this_year), ("all", records)):
+            for label, lowest in (("min", True), ("max", False)):
+                key = f"{prefix}_{label}_{suffix}"
+                value, recorded_on = _record(subset, lowest=lowest)
+                extrema[key] = rounded(value, 3) if value is not None and prefix == "fuel_price" else (rounded(value) if value is not None else None)
+                if recorded_on is not None:
+                    record_dates[key] = recorded_on
+
+    # Always include the current month in the selector, even if there are no costs.
+    bucket(today)
+    month_keys = sorted(monthly, reverse=True)
+    truncated = len(month_keys) > MAX_MONTHS_IN_ATTRIBUTES
+    history = tuple(
+        {"month": key, "fuel": rounded(monthly[key]["fuel"]),
+         "other": rounded(monthly[key]["other"]),
+         "total": rounded(monthly[key]["fuel"] + monthly[key]["other"])}
+        for key in month_keys[:MAX_MONTHS_IN_ATTRIBUTES]
+    )
 
     return FuelioSnapshot(
         vehicle_name=name,
@@ -216,6 +273,17 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         total_actual_cost=rounded(fuel_cost + expenses),
         last_trip_date=last_trip,
         latest_odometer_km=rounded(max(odometers), 1) if odometers else None,
+        fuel_price_min_year=extrema["fuel_price_min_year"],
+        fuel_price_max_year=extrema["fuel_price_max_year"],
+        fuel_price_min_all=extrema["fuel_price_min_all"],
+        fuel_price_max_all=extrema["fuel_price_max_all"],
+        consumption_min_year=extrema["consumption_min_year"],
+        consumption_max_year=extrema["consumption_max_year"],
+        consumption_min_all=extrema["consumption_min_all"],
+        consumption_max_all=extrema["consumption_max_all"],
+        record_dates=record_dates,
+        monthly_cost_history=history,
+        monthly_history_truncated=truncated,
     )
 
 
