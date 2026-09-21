@@ -1,0 +1,14 @@
+# Never commit real Fuelio backups, credentials or vehicle/location data.
+*.zip
+*.csv
+*.gpx
+*.kml
+*.jsonl
+*credentials*.json
+*secret*.json
+.env
+.env.*
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.venv/
