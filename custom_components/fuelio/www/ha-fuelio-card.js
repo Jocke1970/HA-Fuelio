@@ -41,7 +41,7 @@ const ENTITY_SLUGS = Object.freeze({
     ? new Intl.DateTimeFormat("sv-SE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
     : "Okänd månad";
   const style = `
-    :host { display:block; color:var(--primary-text-color, #202124); font:inherit; }
+    :host { display:block; container-type:inline-size; color:var(--primary-text-color, #202124); font:inherit; }
     * { box-sizing:border-box; }
     .shell { overflow:hidden; border-radius:22px; padding:16px; background:var(--ha-card-background, var(--card-background-color,#fff)); box-shadow:var(--ha-card-box-shadow,0 1px 4px #00000019); }
     .header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
@@ -49,6 +49,15 @@ const ENTITY_SLUGS = Object.freeze({
     .muted { color:var(--secondary-text-color,#68727d); font-size:.79rem; }
     .pill { padding:5px 9px; border-radius:99px; background:var(--secondary-background-color,#eef1f4); font-size:.73rem; }
     .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .overview { display:grid; grid-template-columns:1fr; gap:12px; }
+    .overview-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:15px; min-width:0; }
+    .overview-panel h3 { font-size:1rem; margin:0 0 10px; }
+    .overview-row { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 10px; padding:8px 0; border-top:1px solid var(--divider-color,#e2e4e8); }
+    .overview-row:first-of-type { border-top:0; }
+    .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.78rem; }
+    .overview-row strong { text-align:right; font-size:.98rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .overview-row .note { width:100%; text-align:right; font-size:.7rem; color:var(--secondary-text-color,#68727d); }
+    @container (min-width:540px) { .overview { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     .tile { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:17px; padding:14px 9px; text-align:center; }
     .tile .ico { font-size:1.2rem; display:block; margin-bottom:7px; }
     .tile .label { font-size:.78rem; font-weight:700; margin-bottom:7px; }
@@ -167,6 +176,10 @@ const ENTITY_SLUGS = Object.freeze({
     _tile(icon, label, value, detail = "") {
       return `<div class="tile"><span class="ico" aria-hidden="true">${icon}</span><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}</div>`;
     }
+    _panel(icon, title, rows) {
+      return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
+        `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
+    }
     _section(id, icon, title, inner) {
       const open = this._open[id];
       return `<section class="section"><button type="button" data-section="${id}" aria-expanded="${open}" aria-controls="panel-${id}"><span>${icon} ${esc(title)}</span><span aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div id="panel-${id}" class="body">${inner}</div>` : ""}</section>`;
@@ -199,11 +212,33 @@ const ENTITY_SLUGS = Object.freeze({
       const odoNote = (period) => period?.odo_coverage === "partial_start" ?
         `Delperiod: ${period.odo_start_on || "första avläsning"} → ${period.odo_end_on || "senaste avläsning"}` :
         period?.odo_start_on && period?.odo_end_on ? `${period.odo_start_on} → ${period.odo_end_on}` : "Avläsningar saknas";
-      const overview = `<div class="grid">
-        ${this._tile("🛣️", "Mätarställning / denna månads körsträcka", decimal(this._value("latest_odometer_km"), "km"), `${decimal(nowMonth?.km, "km denna månad")} · ${odoNote(nowMonth)}`)}
-        ${this._tile("⛽", "Tankat denna månad", decimal(nowMonth?.litres, "L"))}
-        ${this._tile("💳", "Kostnader denna månad", kroner(nowMonth?.total))}
-        ${this._tile("📏", "Kostnad/km denna månad", decimal(nowMonth?.total_per_logged_km, "kr/km"), "Avläst ODO, ej resloggens summa")}
+      const currentYearData = allYears.find((item) => String(item.year) === String(nowMonth?.month?.slice(0, 4)));
+      const aggregate = this._state("monthly_cost_breakdown")?.attributes || {};
+      const lifetime = aggregate.estimated_lifetime || {};
+      const coverageText = (row) => row?.estimate_coverage === "missing_rate" ? "Pris-/förbrukningsunderlag saknas" :
+        row?.estimate_coverage?.includes?.("one_consumption_value") ? "En förbrukningsavläsning – begränsat underlag" :
+        row?.odo_coverage === "partial_start" ? "Delperiod från första mätningen" : "Uppskattning";
+      const overview = `<div class="overview">
+        ${this._panel("🛣️", "Mätarställning", [
+          ["Aktuell", decimal(this._value("latest_odometer_km"), "km")],
+          ["Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth)],
+          ["Körsträcka i år", decimal(currentYearData?.km, "km"), currentYearData?.odo_coverage === "partial_start" ? "Delperiod" : ""],
+          ["Sedan importstart", decimal(aggregate.lifetime_odometer_km, "km")]
+        ])}
+        ${this._panel("⛽", "Drivmedel", [
+          ["Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km")],
+          ["Tankat denna månad", decimal(nowMonth?.litres, "L")],
+          ["Tankat i år", decimal(currentYearData?.litres, "L")],
+          ["Löpande snitt", decimal(aggregate.latest_two_consumption, "L/100 km"), `${aggregate.latest_two_consumption_count || 0} giltiga tankningar`]
+        ])}
+        ${this._panel("💳", "Bokförda utgifter", [
+          ["Denna månad", kroner(nowMonth?.total)],
+          ["Innevarande år", kroner(currentYearData?.total)]
+        ])}
+        ${this._panel("📏", "Beräknad körkostnad/km", [
+          ["Denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth)],
+          ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)]
+        ])}
       </div>`;
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total))}
@@ -215,11 +250,26 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("⛽", "Bränsle", kroner(selected?.fuel))}
         ${this._tile("🧾", "Övriga utgifter", kroner(selected?.other))}
         ${this._tile("💳", "Totalt", kroner(selected?.total))}
+      </div><div class="section-title">Månadsstatistik · ${esc(selected ? monthName(selected.month) : "Ingen historik")}</div>
+      <div class="grid">
+        ${this._tile("🛣️", "Avläst körsträcka", decimal(selected?.km, "km"), selected?.odo_coverage === "partial_start" ? "Delperiod" : "ODO-differens")}
+        ${this._tile("🚙", "Loggade resor", decimal(selected?.trip_count, "st"))}
+        ${this._tile("📏", "Genomsnitt/resa", decimal(selected?.average_trip_km, "km"), "Loggade reskilometer ÷ antal resor")}
       </div><div class="summary"><span><strong>Totalt sedan importstart</strong><br><span class="muted">Bränsle ${esc(kroner(this._value("fuel_cost")))} · Övrigt ${esc(kroner(this._value("other_expenses")))}</span></span><strong>${esc(kroner(this._value("total_actual_cost")))}</strong></div>
       ${categories(selected?.categories, "Utgifter per kategori · vald månad")}
       ${categories(selectedYear?.categories, `Utgifter per kategori · år ${currentYear}`)}
       <div class="summary"><span>Uppskattad resekostnad · hela importen (inte faktisk utgift)</span><strong>${esc(kroner(this._value("estimated_trip_cost")))}</strong></div>
-      <div class="section-title">Kostnad per avläst ODO-kilometer</div>
+      <div class="section-title">Beräknad körkostnad · förbrukat bränsle</div>
+      <div class="grid">
+        ${this._tile("⛽", "Bränsle · vald månad", kroner(selected?.estimated_fuel))}
+        ${this._tile("💳", "Totalt · vald månad", kroner(selected?.estimated_total))}
+        ${this._tile("⛽", `Bränsle · ${currentYear}`, kroner(selectedYear?.estimated_fuel))}
+        ${this._tile("💳", `Totalt · ${currentYear}`, kroner(selectedYear?.estimated_total))}
+        ${this._tile("⛽", "Bränsle · sedan start", kroner(lifetime.estimated_fuel))}
+        ${this._tile("💳", "Totalt · sedan start", kroner(lifetime.estimated_total))}
+      </div>
+      <div class="notice">Beräknad förbrukning med de två senaste giltiga tankningsvärdena tillgängliga vid varje ODO-intervalls början och då senast kända literpris. Ny tankning påverkar bara efterföljande körning. Om underlag saknas för en del av sträckan visas —. En giltig tankning ger begränsat underlag. Övriga utgifter räknas på betalningsdatum. Beräknat, inte bokfört bränsle.</div>
+      <div class="section-title">Bokförda utgifter per avläst ODO-kilometer</div>
       <div class="grid">
         ${this._tile("⛽", "Bränsle · månad", decimal(selected?.fuel_per_logged_km, "kr/km"), odoNote(selected))}
         ${this._tile("💳", "Totalt · månad", decimal(selected?.total_per_logged_km, "kr/km"), odoNote(selected))}
@@ -228,7 +278,7 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("⛽", "Bränsle · sedan start", decimal(this._value("fuel_cost_per_km_all"), "kr/km"))}
         ${this._tile("💳", "Totalt · sedan start", decimal(this._value("total_cost_per_km_all"), "kr/km"))}
       </div>
-      <div class="notice">Kostnader ÷ ODO-differens, från senaste avläsning före periodstart till senaste inom perioden. Saknas tidigare avläsning räknas bara körning efter första avläsningen och perioden markeras som ofullständig. Saknas användbar differens visas —. Tankningar uppdaterar belopp och mätarställning vid nästa ZIP-inläsning.</div>
+      <div class="notice">Bokförda utgifter ÷ ODO-differens, från senaste avläsning före periodstart till senaste inom perioden. Saknas tidigare avläsning räknas bara körning efter första avläsningen och perioden markeras som ofullständig. Saknas användbar differens visas —. Tankningar uppdaterar belopp och mätarställning vid nästa ZIP-inläsning.</div>
       ${historyTruncated ? `<div class="notice">Månadsväljaren visar de senaste 120 månaderna. Livstidssumman inkluderar även äldre data.</div>` : ""}`;
       const fuel = `<div class="grid">
         ${this._tile("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"), "Rapporterat värde, inte livstidssnitt")}

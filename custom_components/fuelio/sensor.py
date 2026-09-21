@@ -105,6 +105,9 @@ class FuelioSensor(CoordinatorEntity[FuelioCoordinator], SensorEntity):
                 "distance_basis": "odometer_checkpoints",
                 "lifetime_odometer_km": snapshot.odometer_lifetime_km,
                 "lifetime_odo_coverage": snapshot.odometer_lifetime_coverage,
+                "estimated_lifetime": snapshot.estimated_lifetime,
+                "latest_two_consumption": snapshot.latest_two_consumption,
+                "latest_two_consumption_count": snapshot.latest_two_consumption_count,
                 "history_truncated": snapshot.monthly_history_truncated,
                 "months_limit": 120,
             }

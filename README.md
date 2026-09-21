@@ -68,3 +68,10 @@ node tests/test_frontend.mjs
 node tests/test_frontend_real_ids.mjs
 node tests/test_cost_frontend.mjs
 ```
+
+
+## Development candidate: time-aware estimates and four-panel overview (not released)
+
+See `NEXT_ITERATION_DESIGN.md`. The always-current overview groups odometer/month/year/import-km, latest consumption plus current/year litres, booked current/year expenditure, and **estimated** current/year driving cost per km. Historical month selection shows observed ODO distance, count of logged trips, and mean logged trip length. Booked cost/ODO-km remains a distinct measure in the Costs section; preserve its six legacy unique IDs.
+
+Estimates use the up-to-two latest *past* positive reported consumption readings and latest *past* positive fuel unit price as of each ODO interval's beginning. Post-refuel driving can use the new reading; earlier intervals are never repriced. A one-reading fallback is labelled limited, missing rates suppress the full-period estimate, and imprecise calendar boundaries are labelled. Estimate = sum(ODO interval km × applicable estimated SEK/km); estimated total = estimated fuel + actual non-fuel expenses in the period, without double-counting purchased fuel. Fuel bought is distinct from fuel consumed. Data is date-granular, so same-day sequencing is approximate. A user-reported real HA test and Fuelio comparison is required before release or stable promotion.

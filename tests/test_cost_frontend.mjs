@@ -18,10 +18,10 @@ add('sensor.mmk912_last_fuel_price', 'last_fuel_price', 20);
 add('sensor.mmk912_fuel_ups', 'fuel_count', 3);
 add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_cost_breakdown', 1200, {
   months: [{ month: '2026-09', fuel: 1000, other: 200, total: 1200, km: 100, litres: 47.5, odo_coverage: 'partial_start', odo_start_on: '2026-09-05', odo_end_on: '2026-09-20', fuel_ups: 1,
-    fuel_per_logged_km: 10, total_per_logged_km: 12, categories: [{ name: 'Parkering', amount: 200 }] }],
+    fuel_per_logged_km: 10, total_per_logged_km: 12, estimated_fuel: 70, estimated_total: 270, estimated_total_per_km: 2.7, estimate_coverage: 'one_consumption_value', trip_count: 2, average_trip_km: 15, categories: [{ name: 'Parkering', amount: 200 }] }],
   years: [{ year: '2026', fuel: 2000, other: 200, total: 2200, km: 200, fuel_ups: 2,
-    fuel_per_logged_km: 10, total_per_logged_km: 11, categories: [{ name: 'Parkering', amount: 200 }] }],
-  categories_all: [{ name: 'Parkering', amount: 200 }]
+    fuel_per_logged_km: 10, total_per_logged_km: 11, estimated_fuel: 150, estimated_total: 350, estimated_total_per_km: 1.75, litres: 91, trip_count: 5, categories: [{ name: 'Parkering', amount: 200 }] }],
+  categories_all: [{ name: 'Parkering', amount: 200 }], estimated_lifetime: { estimated_fuel: 150, estimated_total: 350 }, lifetime_odometer_km: 205, latest_two_consumption: 5.55, latest_two_consumption_count: 2
 });
 add('sensor.externa_sensorer_fuelio_vehicle_fuel_cost_per_logged_km_since_import_start', 'fuel_cost_per_km_all', 9);
 add('sensor.externa_sensorer_fuelio_vehicle_total_cost_per_logged_km_since_import_start', 'total_cost_per_km_all', 12);
@@ -32,11 +32,18 @@ assert.match(html, /Bränsle · månad/);
 assert.match(html, /10 kr\/km/);
 assert.match(html, /12 kr\/km/);
 assert.match(html, /Antal tankningar/);
-assert.match(html, /Mätarställning \/ denna månads körsträcka/);
+assert.match(html, /Körsträcka denna månad/);
+assert.match(html, /Sedan importstart/);
+assert.match(html, /91 L/);
+assert.match(html, /2,7 kr\/km/);
+assert.match(html, /Månadsstatistik/);
+assert.match(html, /Genomsnitt\/resa/);
+assert.match(html, /15 km/);
+assert.match(html, /70,00 kr/);
 assert.match(html, /47,5 L/);
 assert.match(html, /1\s?200,00 kr/);
-assert.match(html, /Kostnad\/km denna månad/);
-assert.match(html, /Kostnad per avläst ODO-kilometer/);
+assert.match(html, /Beräknad körkostnad\/km/);
+assert.match(html, /Bokförda utgifter per avläst ODO-kilometer/);
 assert.match(html, /Delperiod: 2026-09-05/);
 assert.match(html, /0\.1\.0-beta\.7/);
 console.log('PASS: categorized costs, period-specific kr/km and fuel-ups render with mixed entity IDs');
