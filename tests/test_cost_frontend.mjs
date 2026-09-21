@@ -17,7 +17,7 @@ const add = (id, key, value, attributes = {}) => {
 add('sensor.mmk912_last_fuel_price', 'last_fuel_price', 20);
 add('sensor.mmk912_fuel_ups', 'fuel_count', 3);
 add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_cost_breakdown', 1200, {
-  months: [{ month: '2026-09', fuel: 1000, other: 200, total: 1200, km: 100, litres: 47.5, fuel_ups: 1,
+  months: [{ month: '2026-09', fuel: 1000, other: 200, total: 1200, km: 100, litres: 47.5, odo_coverage: 'partial_start', odo_start_on: '2026-09-05', odo_end_on: '2026-09-20', fuel_ups: 1,
     fuel_per_logged_km: 10, total_per_logged_km: 12, categories: [{ name: 'Parkering', amount: 200 }] }],
   years: [{ year: '2026', fuel: 2000, other: 200, total: 2200, km: 200, fuel_ups: 2,
     fuel_per_logged_km: 10, total_per_logged_km: 11, categories: [{ name: 'Parkering', amount: 200 }] }],
@@ -37,5 +37,6 @@ assert.match(html, /47,5 L/);
 assert.match(html, /1\s?200,00 kr/);
 assert.match(html, /Kostnad\/km denna månad/);
 assert.match(html, /Kostnad per avläst ODO-kilometer/);
+assert.match(html, /Delperiod: 2026-09-05/);
 assert.match(html, /0\.1\.0-beta\.7/);
 console.log('PASS: categorized costs, period-specific kr/km and fuel-ups render with mixed entity IDs');
