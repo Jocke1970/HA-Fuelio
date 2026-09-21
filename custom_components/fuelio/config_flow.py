@@ -31,11 +31,13 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not candidate.is_relative_to(config_dir):
                     errors["base"] = "outside_config"
                 else:
-                    snapshot = await self.hass.async_add_executor_job(load_snapshot, str(candidate))
+                    await self.hass.async_add_executor_job(load_snapshot, str(candidate))
                     await self.async_set_unique_id(str(candidate))
                     self._abort_if_unique_id_configured()
+                    # Do not expose a registration/vehicle name in the entry title.
+                    # Existing titles are intentionally not silently migrated.
                     return self.async_create_entry(
-                        title=f"Fuelio {snapshot.vehicle_name}",
+                        title="Fuelio vehicle",
                         data={CONF_FILE_PATH: str(candidate)},
                     )
             except (OSError, ValueError):
