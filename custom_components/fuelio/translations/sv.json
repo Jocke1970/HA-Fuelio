@@ -1,0 +1,17 @@
+{
+  "title": "Fuelio",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Fuelio lokal ZIP-backup",
+        "description": "Ange sökvägen till Fuelios sync-ZIP i Home Assistants konfigurationsmapp. Ingen Google Drive-inloggning behövs i den här utvecklingsversionen.",
+        "data": {"file_path": "Sökväg till ZIP-fil"}
+      }
+    },
+    "error": {
+      "outside_config": "ZIP-filen måste ligga i Home Assistants konfigurationsmapp.",
+      "invalid_backup": "Kan inte läsa ZIP-filen. Kontrollera att den finns och är en Fuelio-backup med metriska enheter."
+    },
+    "abort": {"already_configured": "ZIP-filen är redan konfigurerad."}
+  }
+}
