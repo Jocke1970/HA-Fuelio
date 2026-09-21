@@ -109,7 +109,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     if any(key not in sections for key in ("Log", "Costs", "TripLog")):
         raise ValueError("Missing Fuelio data section")
     vehicle = sections["Vehicle"][0]
-    name = vehicle.get("Name", "").strip() or "Fuelio vehicle"
+    # Vehicle.Name may contain the registration number. Never retain it in the snapshot.
+    name = "Fuelio vehicle"
     # Zero represents the metric export observed in the supplied sample.
     if vehicle.get("DistUnit") != "0" or vehicle.get("FuelUnit") != "0":
         raise ValueError("This version supports metric Fuelio backups only")
@@ -147,6 +148,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     last_fillup: date | None = None
     last_price: Decimal | None = None
     last_consumption: Decimal | None = None
+    last_consumption_day: date | None = None
     for fillup in sections["Log"]:
         day = _date(fillup["Data"])
         volume = _nonnegative(fillup["Fuel (litres)"], default=Decimal(0))
@@ -162,11 +164,15 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         odo = _nonnegative(fillup.get("Odo (km)", ""))
         if odo is not None and odo > 0:
             odometers.append(odo)
+        # A blank reading on the newest fill-up must not erase an older real reading.
+        reported = _nonnegative(fillup.get("l/100km (optional)", ""))
+        if reported is not None and (last_consumption_day is None or day > last_consumption_day):
+            last_consumption_day = day
+            last_consumption = reported
         if last_fillup is None or day > last_fillup:
             last_fillup = day
             price = _nonnegative(fillup.get("VolumePrice", ""))
             last_price = price if price is not None and price > 0 else (cost / volume if volume else None)
-            last_consumption = _nonnegative(fillup.get("l/100km (optional)", ""))
 
     expense_count = 0
     expenses = Decimal(0)
