@@ -22,3 +22,5 @@ jobs:
         run: node tests/test_frontend_real_ids.mjs
       - name: Categorized cost, period ratios and fill-up frontend regression
         run: node tests/test_cost_frontend.mjs
+      - name: Four-panel overview and historical selector regression
+        run: node tests/test_estimate_frontend.mjs
