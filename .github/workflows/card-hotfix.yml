@@ -1,0 +1,207 @@
+name: Apply one-time Fuelio entity lookup hotfix
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/card-hotfix.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Repair card entity lookups and prepare beta.5
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('custom_components/fuelio/www/ha-fuelio-card.js')
+          s=p.read_text(encoding='utf-8')
+          old='  const valid = (state) =>'
+          assert s.count(old)==1
+          mapping='''  // Home Assistant derives entity IDs from display names, NOT description.key.
+          // Old IDs may retain a pre-privacy vehicle prefix while new IDs use a generic one.
+          const ENTITY_SLUGS = Object.freeze({
+            trip_count: "trips", trip_distance_km: "trip_distance", monthly_trip_distance_km: "trip_distance_this_month",
+            trip_duration_hours: "travel_time", estimated_trip_cost: "estimated_trip_costs_not_actual_spend",
+            fuel_count: "fuel_ups", fuel_litres: "fuel_volume", fuel_cost: "fuel_expenditure",
+            monthly_fuel_cost: "fuel_expenditure_this_month", last_fuel_price: "last_fuel_price",
+            last_reported_consumption: "last_reported_fuel_consumption", last_fillup_date: "last_fuel_up",
+            expense_count: "expense_entries", other_expenses: "other_expenditure",
+            monthly_other_expenses: "other_expenditure_this_month", upcoming_expense_count: "future_expense_entries",
+            total_actual_cost: "total_actual_expenditure", last_trip_date: "last_trip",
+            latest_odometer_km: "latest_odometer", fuel_price_min_year: "lowest_fuel_price_this_year",
+            fuel_price_max_year: "highest_fuel_price_this_year", fuel_price_min_all: "lowest_fuel_price_since_import_start",
+            fuel_price_max_all: "highest_fuel_price_since_import_start",
+            consumption_min_year: "lowest_reported_consumption_this_year",
+            consumption_max_year: "highest_reported_consumption_this_year",
+            consumption_min_all: "lowest_reported_consumption_since_import_start",
+            consumption_max_all: "highest_reported_consumption_since_import_start",
+            monthly_cost_breakdown: "monthly_cost_breakdown",
+          });
+          '''
+          s=s.replace(old,mapping+old,1)
+          old='const entry = hass.states[this._prefix + key];'
+          assert s.count(old)==1
+          s=s.replace(old,'const entry = this._state(key);',1)
+          old='    _state(key) { return this._hass?.states?.[this._prefix + key]; }'
+          assert s.count(old)==1
+          replacement='''    _resolveId(key) {
+              const states = this._hass?.states || {};
+              const registry = this._hass?.entities || {};
+              const suffix = ENTITY_SLUGS[key] || key;
+              // The configured monthly ID may not actually exist when an upgrade gives
+              // the nine new sensors a different device-name prefix.
+              const reference = registry[this._config?.entity] || registry[this._prefix + "last_fuel_price"];
+              const device = reference?.platform === "fuelio" ? reference.device_id : null;
+              const allowed = (id) => !device || !registry[id] ||
+                (registry[id].platform === "fuelio" && registry[id].device_id === device);
+              const exactIds = [key === "monthly_cost_breakdown" ? this._config?.entity : null,
+                this._prefix + suffix, this._prefix + key];
+              for (const id of exactIds) {
+                if (id && states[id] && allowed(id)) return id;
+              }
+              // Match the *same device*, never another configured vehicle. Unique IDs
+              // survive user entity renames; generated name slugs are the fallback.
+              if (!device) return null;
+              const matches = Object.values(registry).filter((entry) => entry &&
+                entry.platform === "fuelio" && entry.device_id === device && states[entry.entity_id] &&
+                ((typeof entry.unique_id === "string" && entry.unique_id.endsWith("_" + key)) ||
+                  entry.entity_id.endsWith("_" + suffix) || entry.entity_id.endsWith("_" + key)));
+              return matches.length === 1 ? matches[0].entity_id : null;
+            }
+            _state(key) { const id = this._resolveId(key); return id ? this._hass?.states?.[id] : undefined; }'''
+          s=s.replace(old,replacement,1)
+          assert s.count('0.1.0-dev.1')==2
+          s=s.replace('0.1.0-dev.1','0.1.0-beta.5')
+          p.write_text(s,encoding='utf-8')
+          manifest=Path('custom_components/fuelio/manifest.json')
+          m=manifest.read_text(encoding='utf-8')
+          assert m.count('0.1.0-beta.4')==1
+          manifest.write_text(m.replace('0.1.0-beta.4','0.1.0-beta.5'),encoding='utf-8')
+          readme=Path('README.md')
+          r=readme.read_text(encoding='utf-8')
+          assert 'beta.4' in r
+          r=r.replace('beta.4','beta.5')
+          r=r.replace('# HA-Fuelio 🚙','# HA-Fuelio 🚙\n\n**Beta.5 card hotfix:** The 28 sensor IDs are generated from displayed names rather than Python parser keys; existing entities can keep an old vehicle prefix while new ones use a generic prefix. The card now resolves them through the HA entity/device registry. Upgrade your existing integration and copy the card JS again into `/config/www`, keeping one Lovelace resource at `/local/ha-fuelio-card.js?v=0.1.0-beta.5`. Browser refresh required. No entity renaming or new ZIP is required.\n',1)
+          readme.write_text(r,encoding='utf-8')
+          notes=Path('RELEASE_NOTES.md')
+          notes.write_text('''# HA-Fuelio v0.1.0-beta.5 🚙
+
+**Experimental frontend hotfix for beta.4.** Beta.4 screenshot showed the most recent litre price but blank older summaries, month history and record tiles. The card wrongly assumed `SensorEntityDescription.key` equals the generated Home Assistant entity ID, and wrongly assumed pre-existing and new entities always share the same prefix.
+
+## Fixed
+- Map all 28 backend keys to their actual name-derived entity-ID suffixes; resolve entities using Home Assistant's read-only entity registry and the configured vehicle's `device_id`. Keep one vehicle's entities separated from other Fuelio vehicles, even when their generated prefixes differ.
+- Accept the original dashboard YAML `entity: sensor.mmk912_monthly_cost_breakdown` as a vehicle hint when that newly generated ID differs, provided the old fuel price entity still exists. You may alternatively configure the actual monthly breakdown entity ID. Do not rename any entities for this fix.
+- Card version and resource cache-buster `0.1.0-beta.5`; Python manifest bumped but backend aggregation logic and the original 28 sensor unique IDs are unchanged.
+- Regression tests exercise the real beta.3 name-derived IDs, the new generic-prefix IDs, monthly cost attributes, record dates, isolation from an unrelated vehicle and the existing synthetic frontend test.
+
+## Upgrade and install frontend again
+1. Update the existing HACS Fuelio integration to `v0.1.0-beta.5`, restart Home Assistant; do not remove/re-add the integration or replace the private ZIP.
+2. Run in HA terminal: `mkdir -p /config/www && cp /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuelio-card.js && ls -lh /config/www/ha-fuelio-card.js`.
+3. Change the existing single Lovelace JavaScript module resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.5`. Refresh the browser fully.
+4. Keep the existing YAML `type: custom:ha-fuelio-card`, `entity: sensor.mmk912_monthly_cost_breakdown`, `title: Fuelio · Bilöversikt`. If the dashboard was configured with another vehicle, use an existing or actual new `monthly_cost_breakdown` entity for that vehicle.
+5. Check 28 registered sensors and all fields; compare extrema and month totals with your private Fuelio export. A legitimately absent individual reported consumption may still show `—`.
+
+No backend service calls, Google Drive sync, service intervals, tank level or range are added. This is a prerelease. Keep the known beta.4 tag and stable `main` unchanged until real HA testing.
+''',encoding='utf-8')
+          PY
+          cat > tests/test_frontend_real_ids.mjs <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import vm from 'node:vm';
+          const source = readFileSync('custom_components/fuelio/www/ha-fuelio-card.js', 'utf8');
+          const types = new Map();
+          class FakeElement {
+            attachShadow() {
+              this.shadowRoot = { innerHTML: '', addEventListener: () => {} };
+              return this.shadowRoot;
+            }
+          }
+          const context = vm.createContext({ HTMLElement: FakeElement, customElements: {
+            get: (type) => types.get(type), define: (type, klass) => types.set(type, klass),
+          }, window: { customCards: [] } });
+          new vm.Script(source).runInContext(context);
+          const Card = types.get('ha-fuelio-card');
+          const card = new Card();
+          // The beta.4 documentation supplied this plausible but absent monthly entity.
+          card.setConfig({ entity: 'sensor.mmk912_monthly_cost_breakdown' });
+          const states = {};
+          const entities = {};
+          const add = (id, key, value, attrs = {}, device = 'carA') => {
+            states[id] = { state: String(value), attributes: attrs, last_updated: '2026-09-21T23:00:00+02:00' };
+            entities[id] = { entity_id: id, device_id: device, platform: 'fuelio', unique_id: `entry-${device}_${key}` };
+          };
+          const legacy = 'sensor.mmk912_';
+          add(legacy + 'last_fuel_price', 'last_fuel_price', 22.64);
+          add(legacy + 'latest_odometer', 'latest_odometer_km', 178593);
+          add(legacy + 'last_reported_fuel_consumption', 'last_reported_consumption', 5.8);
+          add(legacy + 'fuel_ups', 'fuel_count', 3);
+          add(legacy + 'fuel_volume', 'fuel_litres', 162.47);
+          add(legacy + 'last_fuel_up', 'last_fillup_date', '2026-09-12');
+          add(legacy + 'trips', 'trip_count', 120);
+          add(legacy + 'trip_distance', 'trip_distance_km', 2195.507);
+          add(legacy + 'travel_time', 'trip_duration_hours', 39.61);
+          add(legacy + 'last_trip', 'last_trip_date', '2026-09-21');
+          add(legacy + 'fuel_expenditure', 'fuel_cost', 3352.82);
+          add(legacy + 'other_expenditure', 'other_expenses', 598);
+          add(legacy + 'total_actual_expenditure', 'total_actual_cost', 3950.82);
+          add(legacy + 'estimated_trip_costs_not_actual_spend', 'estimated_trip_cost', 1330.91);
+          const generic = 'sensor.fuelio_vehicle_';
+          add(generic + 'monthly_cost_breakdown', 'monthly_cost_breakdown', 1242.26, { months: [
+            { month: '2026-09', fuel: 1242.26, other: 0, total: 1242.26 },
+            { month: '2026-08', fuel: 500, other: 598, total: 1098 },
+          ], history_truncated: false });
+          add(generic + 'lowest_fuel_price_this_year', 'fuel_price_min_year', 19.91, { recorded_on: '2026-04-01' });
+          add(generic + 'highest_fuel_price_since_import_start', 'fuel_price_max_all', 24.45, { recorded_on: '2025-01-02' });
+          add(generic + 'lowest_reported_consumption_this_year', 'consumption_min_year', 5.8, { recorded_on: '2026-09-12' });
+          // A different vehicle MUST NOT fill in our missing highest year reading.
+          add('sensor.other_car_highest_fuel_price_this_year', 'fuel_price_max_year', 99.99, { recorded_on: '2026-01-01' }, 'carB');
+          card.hass = { states, entities };
+          let html = card.shadowRoot.innerHTML;
+          assert.match(html, /Data tillgänglig/);
+          assert.match(html, /178\s?593 km/);
+          assert.match(html, /5,8 L\/100 km/);
+          assert.match(html, /3 st/);
+          assert.match(html, /1\s?242,26 kr/);
+          assert.match(html, /2026-04-01/);
+          assert.match(html, /19,91 kr\/L/);
+          assert.match(html, /24,45 kr\/L/);
+          assert.doesNotMatch(html, /99,99/);
+          assert.equal(card._months().length, 2);
+          assert.equal(card._state('fuel_price_max_year'), undefined);
+          assert.equal(card._state('monthly_cost_breakdown').state, '1242.26');
+          // User-renamed ID should still resolve by stable registry unique_id.
+          const before = generic + 'lowest_fuel_price_this_year';
+          const after = 'sensor.user_custom_price_record';
+          states[after] = states[before]; entities[after] = { ...entities[before], entity_id: after };
+          delete states[before]; delete entities[before];
+          card.hass = { states, entities };
+          assert.equal(card._state('fuel_price_min_year').entity_id, undefined);
+          assert.match(card.shadowRoot.innerHTML, /19,91 kr\/L/);
+          console.log('PASS: real name-derived and cross-prefix entity IDs; same-device registry resolution and vehicle isolation');
+          JS
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/tests.yml')
+          s=p.read_text(encoding='utf-8')
+          needle='        run: node tests/test_frontend.mjs\n'
+          assert s.count(needle)==1
+          p.write_text(s.replace(needle,needle+'      - name: Real entity ID and mixed-prefix regression\n        run: node tests/test_frontend_real_ids.mjs\n'),encoding='utf-8')
+          PY
+          rm .github/workflows/card-hotfix.yml
+          python -m compileall -q custom_components tests
+          python -m unittest discover -s tests -v
+          node --check custom_components/fuelio/www/ha-fuelio-card.js
+          node tests/test_frontend.mjs
+          node tests/test_frontend_real_ids.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(dev): resolve Fuelio card sensors by actual HA entity IDs and device registry; beta.5 candidate'
+          git push origin HEAD:dev
