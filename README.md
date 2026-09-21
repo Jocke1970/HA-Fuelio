@@ -1,54 +1,42 @@
 # HA-Fuelio 🚙
 
-Read-only Home Assistant integration for Fuelio. **Experimental beta (`v0.1.0-beta.1`): Home Assistant installation and HACS delivery have not yet been smoke-tested.** Keep Drivvo as a backup until the values have been compared.
+Read-only Home Assistant custom integration for Fuelio. **Experimental beta (`v0.1.0-beta.2`) — not yet verified inside a running Home Assistant.** Keep Drivvo in place until values match. The previous `beta.1` has a HACS packaging error and must not be selected.
 
-## What is included?
+## Included
 
-- A native Home Assistant **configuration flow** under Settings → Devices & services → Add integration → Fuelio.
-- 19 summary sensors for one vehicle per ZIP: trips, travel distance/time, monthly distance, refuelling, fuel volume and expenses, other costs, dates and odometer.
-- Read-only refresh from a local Fuelio sync ZIP every five minutes. The backup path must stay inside HA's configuration folder, including after resolving symbolic links.
-- No raw trips, vehicle registration, VIN or GPS location are exposed in sensor attributes. Private sample backups and credentials are not committed.
+- Native configuration flow via Settings → Devices & services → Add integration → Fuelio.
+- 19 summary sensors for one vehicle per metric Fuelio ZIP: trip totals, distance, travel time, fuel volume and expenses, odometer, dates and more.
+- Local ZIP re-read approximately every 5 minutes. The ZIP path must reside within HA's configuration directory, including after resolving symbolic links.
+- Read-only: Fuelio, Drivvo and the backup are never modified. Raw GPS, VIN, plate number and trip details are not published as entity attributes.
+- HACS-compatible repository metadata (`hacs.json`) in beta.2's tagged source; CI tests verify its presence.
 
-**UI scope:** only the configuration form and regular sensor entities. There is **no dedicated dashboard, custom Lovelace card, trip list, map or historical recorder backfill** in this beta.
+**UI scope:** built-in setup form and sensor entities only. No Lovelace dashboard, custom card, trip list or map yet.
 
-**Not yet implemented:** automatic Google Drive retrieval, Dropbox, separate trip entities, nonmetric units or a multi-vehicle CSV import. This prerelease uses SEK-labelled currency values and expects one vehicle per backup ZIP.
+**Not yet implemented:** automatic Google Drive or Dropbox backup fetch, recorder history backfill, nonmetric exports and multiple vehicles in a single ZIP. The currency is labelled SEK and must be verified against your Fuelio setup.
 
-## Install this beta
+## Install v0.1.0-beta.2
 
-### HACS custom repository (experimental)
+1. In HACS add `https://github.com/Jocke1970/HA-Fuelio` as a custom **Integration** repository if not already added. Select `v0.1.0-beta.2` (enable prereleases if necessary). Do not choose `v0.1.0-beta.1`, which lacks `hacs.json`. If the old list persists, refresh the repository/version list; remove and re-add this custom repo only if necessary, without resetting HACS itself.
+2. Alternatively copy `custom_components/fuelio/` from the beta.2 release into HA's `/config/custom_components/fuelio/`.
+3. Place your Fuelio sync ZIP at `/config/fuelio/vehicle-1-sync.csv.zip` (create folder first). Do not publish this private file.
+4. Restart Home Assistant; go to Settings → Devices & services → Add integration → **Fuelio**.
+5. Enter `fuelio/vehicle-1-sync.csv.zip`, or the corresponding absolute path inside HA's configuration folder. Compare the values with Fuelio.
 
-Add `https://github.com/Jocke1970/HA-Fuelio` as a custom repository with category **Integration**, then choose `v0.1.0-beta.1` if it is available. Prerelease handling and actual installation have not been verified yet; use the manual route below if HACS does not offer the version.
+For HA deployments using a config path other than `/config`, use the real configuration folder. Later ZIP replacements should be atomic at the same path. The integration polls local storage; it does **not** download backups itself.
 
-### Manual alternative
+## Data interpretation
 
-Copy `custom_components/fuelio/` from the `v0.1.0-beta.1` release tag into HA's `/config/custom_components/fuelio/`.
+- Trip distance is in metres in the export and converted to km. Duration is seconds converted to hours.
+- Fuelio's trip cost is **estimated**, shown separately and never added to actual fuel + other expenses.
+- Future expenses are counted separately, excluded from current spending. Templates and income are excluded.
+- Last consumption reflects the latest recorded figure, not a fabricated lifetime average. Missing data remains unavailable.
+- Old ZIP data does not backfill the HA recorder; corrected historical totals can decrease.
+- Only metric exports (`DistUnit=0`, `FuelUnit=0`) currently work. Other units explicitly fail validation.
 
-### Configure
+## Branch and release policy
 
-1. Export a Fuelio sync ZIP and put it at `/config/fuelio/vehicle-1-sync.csv.zip` (create the directory first). Keep the file private: backups can contain exact location history, registration numbers, notes and VIN.
-2. Restart Home Assistant.
-3. Select Settings → Devices & services → Add integration → **Fuelio**.
-4. Enter `fuelio/vehicle-1-sync.csv.zip` as the ZIP path (or an absolute path inside HA's config folder).
-5. Compare all available sensors against Fuelio and report issues without attaching personal backups or raw logs.
-
-On non-HAOS installations the config folder may be somewhere other than `/config`; use the actual Home Assistant config directory. Later, replace the ZIP **atomically** at the same path. The integration refreshes it roughly every five minutes, but does not download backups itself.
-
-## Interpretation and limitations
-
-- TripDist in the export is metres → km; TripDuration is seconds → hours.
-- TripCost is an **estimated** amount and is never added to actual spending (fuel + other expenses).
-- Future-dated expenses are counted separately, excluding them from current actual expenditure. Template and income records are excluded.
-- Last reported fuel consumption is the last available recorded reading, not a computed lifetime mean; an empty value remains unavailable.
-- Importing historic data does **not** backfill Home Assistant recorder or long-term statistics. Historical corrections may cause total sensors to decrease.
-- Only metric exports (`DistUnit=0`, `FuelUnit=0`) currently work; nonmetric units trigger a validation error instead of silently generating inaccurate values.
-- Currency is labelled SEK based on the known Fuelio configuration; the CSV has not supplied an independently verified ISO currency code.
-
-## Development and release rules
-
-`dev` → pull request → `beta` → real HA beta smoke test → pull request → `main` (stable). This beta is for testing; **do not promote to main** until the integration loads in actual HA, all 19 entities are checked, reload works, ZIP replacement refreshes, and a missing ZIP makes readings unavailable.
-
-The GitHub Actions suite compiles the integration and runs synthetic parser regression tests. These tests do **not** replace HA runtime tests. Run locally with `python -m unittest discover -s tests -v`.
+`dev` → PR → `beta` → real HA beta smoke test → PR → `main` (stable). The GitHub Actions suite compiles the Python integration, runs synthetic parser and HACS metadata tests, and publishes marked beta prereleases. These checks do not replace live Home Assistant tests. **Main stays unchanged until testing passes.**
 
 ## Privacy
 
-Never upload an unredacted Fuelio ZIP, raw CSV or GPX, registration data, precise GPS coordinates, Drive credentials or raw diagnostics to a public issue. `.gitignore` offers an extra safeguard, but always inspect staged files before commits.
+Real Fuelio ZIP/CSV/GPX files may contain precise location history, plate numbers, notes and VINs. Do not commit or attach any unredacted backup, Drive credentials or raw diagnostics to a public GitHub issue. `.gitignore` is additional protection, not a substitute for checking staged files.
