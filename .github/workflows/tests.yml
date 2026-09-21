@@ -20,3 +20,5 @@ jobs:
         run: node tests/test_frontend.mjs
       - name: Real entity ID and mixed-prefix regression
         run: node tests/test_frontend_real_ids.mjs
+      - name: Categorized cost, period ratios and fill-up frontend regression
+        run: node tests/test_cost_frontend.mjs
