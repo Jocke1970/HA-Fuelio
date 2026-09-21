@@ -45,5 +45,5 @@ assert.match(html, /1\s?200,00 kr/);
 assert.match(html, /Beräknad körkostnad\/km/);
 assert.match(html, /Bokförda utgifter per avläst ODO-kilometer/);
 assert.match(html, /Delperiod: 2026-09-05/);
-assert.match(html, /0\.1\.0-beta\.7/);
+assert.match(html, /0\.1\.0-beta\.8/);
 console.log('PASS: categorized costs, period-specific kr/km and fuel-ups render with mixed entity IDs');

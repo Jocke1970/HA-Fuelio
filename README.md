@@ -70,7 +70,7 @@ node tests/test_cost_frontend.mjs
 ```
 
 
-## Development candidate: time-aware estimates and four-panel overview (not released)
+## Beta.8: time-aware estimates and four-panel overview (experimental)
 
 See `NEXT_ITERATION_DESIGN.md`. The always-current overview groups odometer/month/year/import-km, latest consumption plus current/year litres, booked current/year expenditure, and **estimated** current/year driving cost per km. Historical month selection shows observed ODO distance, count of logged trips, and mean logged trip length. Booked cost/ODO-km remains a distinct measure in the Costs section; preserve its six legacy unique IDs.
 

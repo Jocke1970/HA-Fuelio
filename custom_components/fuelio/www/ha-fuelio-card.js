@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.7 — self-contained, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.8 — self-contained, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.7";
+  const CARD_VERSION = "0.1.0-beta.8";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
