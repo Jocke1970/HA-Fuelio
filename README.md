@@ -1,71 +1,70 @@
 # HA-Fuelio 🚙
 
-**Beta.5 card hotfix:** The 28 sensor IDs are generated from displayed names rather than Python parser keys; existing entities can keep an old vehicle prefix while new ones use a generic prefix. The card now resolves them through the HA entity/device registry. Upgrade your existing integration and copy the card JS again into `/config/www`, keeping one Lovelace resource at `/local/ha-fuelio-card.js?v=0.1.0-beta.5`. Browser refresh required. No entity renaming or new ZIP is required.
+Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). Development follows `dev → beta → main`; `main` is not promoted until real Home Assistant testing is complete. **Beta.6 is a development candidate until the GitHub prerelease is published.** Keep Drivvo as a reference for independent verification.
 
+## Features
 
-Read-only Home Assistant custom integration for [Fuelio](https://www.fuel.io/). **`dev` contains an experimental candidate for `v0.1.0-beta.5`; the most recently released beta is `v0.1.0-beta.3`.** Keep Drivvo as a reference until aggregate values and update behavior are verified in real Home Assistant.
+- Reads one vehicle's local metric Fuelio sync ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) roughly every five minutes. It never modifies the ZIP or posts to Fuelio.
+- **36 sensors in beta.6:** the original 19 stable summary sensors, eight dated fuel-price/consumption extrema, monthly cost breakdown, and eight additional analytics sensors. Existing sensor unique IDs are unchanged.
+- Six **SEK per logged km** sensors: fuel expenditure and total actual expenditure for the current calendar month, current calendar year and entire imported history. Two more sensors count fuel-ups for the current month and year; the original `Fuel-ups` counts all non-future fill-ups in the import.
+- `Monthly cost breakdown` contains capped aggregate `months` (up to 120), `years` (up to 40), and `categories_all` attributes. Each period has fuel, other and total expenditure, logged trip km, fill-up count, both per-km ratios and category totals. The current month always exists; `history_truncated` indicates when older months are absent from the selector. Lifetime sensors cover all records.
+- `Costs.CostTypeID` links to `CostCategories.CostTypeID` and uses the matching `Name` only as an aggregate display label. Missing/unmatched category IDs are `Okategoriserat`. Templates, income and future expenses do not count as actual expenditure. Each category list contains at most 20 entries, with overflow grouped into `Övriga kategorier`. No individual expense, notes, internal IDs, trip routes, location coordinates or vehicle identifiers are exposed as state attributes.
+- Eight extrema: positive recorded fuel prices and individual reported fuel consumption, lowest/highest this year and since import start, with `recorded_on` dates. Missing actual consumption stays `unknown` rather than using an invented average.
+- A responsive, standalone Lovelace card at `custom_components/fuelio/www/ha-fuelio-card.js` displays monthly selection, categorized expenses, per-period fuel-ups, cost/km, fuel statistics, records and limitations. Icon: `custom_components/fuelio/brand/icon.png`.
 
-## What it does
+### Critical interpretation of kr/km
 
-- Reads a single vehicle's **metric** Fuelio sync CSV ZIP (`Vehicle`, `Log`, `Costs`, `TripLog`) from HA's config folder about every five minutes. Never changes Fuelio, Drivvo or the ZIP.
-- **28 sensors on dev:** the original 19 summary sensors (IDs unchanged), eight new fuel-price/consumption records, and one monthly cost-breakdown sensor for the custom card.
-- New records: lowest/highest positive fuel price **this calendar year** and **since the first relevant record in the export**, plus lowest/highest positive *reported L/100 km per fuel-up* for the same two periods. Each record sensor has a `recorded_on` attribute with the newest date when tied. No reported consumption means `unknown`, never an invented average. Fuel price uses positive `VolumePrice`, falling back to positive cost divided by litres when needed.
-- `Monthly cost breakdown` exposes the current month's actual spend as its state and `months` attributes (`month: YYYY-MM`, `fuel`, `other`, `total`) for the most recent **120 recorded months**. The current month is always included; `history_truncated: true` warns if older months are omitted from the selector. **Lifetime sensors still include all records.** Future expenses, template entries, and income entries never count toward actual spend. Fuelio trip estimates are separate from actual costs.
-- `custom_components/fuelio/brand/icon.png` is the native Home Assistant integration icon. A responsive, standalone, read-only Lovelace card is included at `custom_components/fuelio/www/ha-fuelio-card.js`; see installation below.
+`Bränslekostnad per loggad km = fuel expenditure in period / distance of trips logged in that SAME period`.
 
-**Not yet available:** automatic Google Drive/Dropbox sync, individual trip/route entities, map, service intervals, tank level, range, precise expense categories such as 'service', nonmetric exports, recorder backfill or multiple vehicles within a single CSV. These fields are deliberately shown as unavailable rather than imported from Drivvo.
+`Total kostnad per loggad km = (fuel expenditure + non-fuel actual expenditure in period) / logged trip distance in that period`.
 
-## Install or upgrade the integration
+Periods are the selected calendar month, its calendar year and the entire imported history. Current-period values update when the local ZIP is replaced and the integration polls again. If a period has no positive logged trip distance, ratios are `unknown` and shown as `—`, **not zero**. This ratio is *not the whole vehicle's exact cost per odometer kilometre*: trips may be missing or incomplete, and refuelling expenditure is booked on the transaction date rather than accrued over the fuel-consumption interval. Fuelio's `TripCost` is a separate estimated trip cost, never added to actual expenditure.
 
-1. In HACS, use the custom **Integration** repository `https://github.com/Jocke1970/HA-Fuelio` and choose the latest **published** prerelease. For beta.5 testing, choose `v0.1.0-beta.5` only once that release exists. Beta.1 is broken and must not be installed.
-2. Keep your ZIP in HA's **actual configuration directory**, e.g. `/config/fuelio/vehicle-1-sync.csv.zip` or `/homeassistant/fuelio/vehicle-1-sync.csv.zip` depending on deployment. Never place it in a nested `config/config` directory, post it publicly or commit it to GitHub.
-3. Restart Home Assistant after the upgrade. **Do not remove/re-add an existing Fuelio integration**: its config entry and 19 prior entity IDs must remain stable. New installs use Settings → Devices & services → Add integration → Fuelio, ZIP path `fuelio/vehicle-1-sync.csv.zip`.
-4. On beta.5, check for **28 Fuelio sensors** (19 original + 8 records + 1 monthly), no duplicated old IDs, plausible fuel prices and reported consumption, and unchanged existing totals. Optional missing extrema can legitimately be `unknown`.
+## Install or upgrade
 
-Manual integration alternative: copy `custom_components/fuelio/` from the chosen release into HA's existing `custom_components/fuelio/` folder, then restart. Never overwrite your Fuelio ZIP.
+1. Add the HACS custom integration repository `https://github.com/Jocke1970/HA-Fuelio` (category **Integration**) and select the latest **published** beta prerelease. Do not install the broken beta.1 tag.
+2. Keep the private ZIP inside Home Assistant's actual configuration root: `fuelio/vehicle-1-sync.csv.zip`, typically `/config/fuelio/vehicle-1-sync.csv.zip` or `/homeassistant/fuelio/vehicle-1-sync.csv.zip`. Do not put it in a nested `config/config` folder, GitHub or public logs. The config flow uses the relative path `fuelio/vehicle-1-sync.csv.zip`.
+3. Update through HACS and restart Home Assistant. **Do not delete/re-add the integration or rename existing entities:** the original registration-based IDs may differ from the new generic vehicle-name IDs, but the card uses the HA entity/device registry to associate them safely.
+4. For beta.6, check for 36 entities (28 previous + eight new), and compare the new category, fill-up and kr/km figures with your private Fuelio export. Nothing is promoted to stable without the real HA test.
 
-## Install the Lovelace card (manual frontend resource)
+Manual alternative: copy the integration directory from the selected release into the existing `custom_components/fuelio/` directory and restart. Never overwrite the Fuelio ZIP.
 
-**HACS installs the integration files but this release does not automatically register its separate Lovelace card.** Run this complete command in a Home Assistant terminal (replace `/config` with the actual config root if needed):
+## Lovelace card
+
+HACS installs the integration but does not automatically register the separate card. After updating the integration, run this **entire command** in the HA terminal (adapt `/config` if your configuration root differs):
 
 ```bash
-mkdir -p /config/www && cp /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuelio-card.js && ls -lh /config/www/ha-fuelio-card.js
+mkdir -p /config/www && cp -f /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuelio-card.js && ls -lh /config/www/ha-fuelio-card.js
 ```
 
-If `www` was newly created, restart Home Assistant so `/local` is available. In your dashboard's **Resources** settings, add a JavaScript module resource with URL `/local/ha-fuelio-card.js?v=0.1.0-beta.5` and type **JavaScript module**. Refresh the browser/dashboard after updating the file or version in the URL to avoid cached JS. **Do not add the resource twice.**
+Keep **one** dashboard resource of type JavaScript module and update its URL to `/local/ha-fuelio-card.js?v=0.1.0-beta.6`. Fully refresh the browser. If `/config/www` was first created, restart HA to expose `/local`.
 
-Paste this entire YAML as a **Manual card**, replacing `sensor.your_vehicle_monthly_cost_breakdown` with your actual sensor entity ID from Developer Tools → States:
+Manual dashboard card (replace `entity` with the actual monthly breakdown sensor if this vehicle uses another ID):
 
 ```yaml
 type: custom:ha-fuelio-card
-entity: sensor.your_vehicle_monthly_cost_breakdown
+entity: sensor.mmk912_monthly_cost_breakdown
 title: Fuelio · Bilöversikt
 ```
 
-This card determines the vehicle's other sensor IDs from the common prefix of the `monthly_cost_breakdown` entity. No registration or GPS information is embedded in the JavaScript or repository examples. You can place multiple cards with different monthly entities for separately configured vehicles. The card requires the beta.5 backend's new sensors; on older installs it displays missing values instead of inventing them.
+For the existing test installation, `sensor.mmk912_monthly_cost_breakdown` is a legacy vehicle hint; the real registered monthly sensor can have a different prefix. The card resolves the rest within the same Fuelio device. Multiple vehicles need separate card configurations. The card is read-only and has no remote requests or Home Assistant service calls.
 
-The card displays compact overview tiles, month selector with year/month expenditure, lifetime totals, fuel summary, eight dated records, service-data limitations, and its frontend version (`0.1.0-dev.1` during this initial preview). The layout uses two columns on mobile and four where space permits. It sends **no Home Assistant service calls** and has no remote dependencies.
+## Privacy, scope and limitations
 
-## Data definitions and privacy
+The backup may contain VIN, registration, notes and precise GPS trails. Only aggregate values are retained. Cost category names are user-supplied text and become visible in the user's own HA attributes; do not include sensitive information in category names if that matters. Never commit, upload or publish an unredacted ZIP, private credentials, raw diagnostics or genuine vehicle test fixtures.
 
-- `TripDist` metres → km; `TripDuration` seconds → hours; `TripCost` is **estimated** and never added to actual fuel and other expenses.
-- `Last reported fuel consumption` uses the most recent nonempty recorded value, even when the most recent fill-up is blank. It is not the lifetime average. The new minimum/maximum sensors compare **individual real L/100km readings**, not a mean of a year, and reject zero/missing records.
-- This year's records mean **Jan 1 to today** in HA's local timezone, excluding future-dated fill-ups. Since-start means data present in the Fuelio ZIP, **not** historic Drivvo data. Dates use the calendar day in the export.
-- The monthly selector groups all valid costs other than fuel as **Övriga utgifter**. It cannot distinguish service from parking unless Fuelio exposes and we validate reliable categories. Historical months without any recorded spending are not inserted artificially, except the current month (to show zero when appropriate).
-- Monetary values are labelled SEK based on the known configuration, not independent proof of the export's ISO currency. Historical corrections can reduce totals. ZIP imports do not backfill Home Assistant Recorder.
-- Original entity unique IDs use the stable existing format. Existing vehicle/plate-based entity IDs and config-entry titles are **not silently renamed** on upgrade. Rename them manually in HA only after checking automations, dashboards and history references.
-- Fuelio ZIPs may include VIN, registration, notes and precise location trails. The snapshot and the month/record attributes contain only generic names, numeric aggregates and dates. Never commit or publish unredacted exports or diagnostics.
+Not yet implemented: automatic Google Drive/Dropbox sync, full odometer-based cost/km, service schedules, fuel level/range, individual routes, recorder history backfill, nonmetric exports or multiple vehicles in one ZIP. Amounts are labelled SEK according to the current configured profile, not independent verification of export currency. Future refuelling/expenses are excluded from reported actual spend. Backup imports do not backfill HA Recorder.
 
-## Verification and branches
+## Testing and release workflow
 
-`dev` → pull request → `beta` prerelease → real HA tests → pull request → `main` stable. Do not promote to `main` without verification. The beta.2 missing-file and recovery tests passed in a real HA; beta.3 was observed with all 19 sensor values (including an available reported consumption of 5.8 L/100km). An exhaustive comparison with Fuelio, changed-content ZIP refresh, card behavior and complete reload/unload have not all been independently verified.
+`dev → PR → beta prerelease → real HA validation → PR → main`. Known real tests: beta.2 missing-ZIP failure and recovery; beta.3 all original 19 values; beta.5 all 28 sensor values and the dashboard after mixed-prefix fixes. Beta.6 requires new real tests for 36 sensor count, actual categories, month selection, period ratios and replacement ZIP refreshing. The older uploaded backup contains `CostCategories`/`Costs.CostTypeID`, but the newer six-expense HA backup is not present in this repository or in the current conversation attachments.
 
-Run regression tests from repository root:
+Local CI commands, using only fabricated test fixtures:
 
 ```bash
 python -m unittest discover -s tests -v
 node --check custom_components/fuelio/www/ha-fuelio-card.js
 node tests/test_frontend.mjs
+node tests/test_frontend_real_ids.mjs
+node tests/test_cost_frontend.mjs
 ```
-
-All committed test records are fabricated; no real Fuelio backup belongs in the repository.

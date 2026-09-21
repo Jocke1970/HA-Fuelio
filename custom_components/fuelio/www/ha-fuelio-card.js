@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.5 — self-contained, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.6 — self-contained, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.5";
+  const CARD_VERSION = "0.1.0-beta.6";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -22,6 +22,13 @@ const ENTITY_SLUGS = Object.freeze({
   consumption_max_year: "highest_reported_consumption_this_year",
   consumption_min_all: "lowest_reported_consumption_since_import_start",
   consumption_max_all: "highest_reported_consumption_since_import_start",
+  fuel_count_month: "fuel_ups_this_month", fuel_count_year: "fuel_ups_this_year",
+  fuel_cost_per_km_month: "fuel_cost_per_logged_km_this_month",
+  total_cost_per_km_month: "total_cost_per_logged_km_this_month",
+  fuel_cost_per_km_year: "fuel_cost_per_logged_km_this_year",
+  total_cost_per_km_year: "total_cost_per_logged_km_this_year",
+  fuel_cost_per_km_all: "fuel_cost_per_logged_km_since_import_start",
+  total_cost_per_km_all: "total_cost_per_logged_km_since_import_start",
   monthly_cost_breakdown: "monthly_cost_breakdown",
 });
   const valid = (state) => state && !["unknown", "unavailable", "none", "null", ""].includes(String(state.state).toLowerCase());
@@ -57,7 +64,10 @@ const ENTITY_SLUGS = Object.freeze({
     .summary strong { font-variant-numeric:tabular-nums; text-align:right; }
     .notice { padding:12px; margin-top:10px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); border-radius:13px; font-size:.8rem; line-height:1.45; }
     .small { font-size:.75rem; } .foot { text-align:right; margin-top:12px; }
-    @media (min-width:620px) { .shell { padding:20px; } .grid { grid-template-columns:repeat(4,minmax(0,1fr)); } .records { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+    .category-list { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:4px 12px; }
+    .category-row { display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--divider-color,#e2e4e8); font-size:.84rem; }
+    .category-row:last-child { border:0; } .category-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+    @media (min-width:850px) { .shell { padding:20px; } .grid { grid-template-columns:repeat(4,minmax(0,1fr)); } .records { grid-template-columns:repeat(4,minmax(0,1fr)); } }
     @media (max-width:340px) { .tile { padding:11px 5px; } .tile .value { font-size:.92rem; } }
   `;
 
@@ -107,13 +117,15 @@ const ENTITY_SLUGS = Object.freeze({
         "monthly_cost_breakdown", "latest_odometer_km", "trip_count", "trip_distance_km", "trip_duration_hours",
         "last_fuel_up_date", "last_fillup_date", "last_fuel_price", "last_reported_consumption", "fuel_count",
         "fuel_litres", "fuel_cost", "other_expenses", "total_actual_cost", "estimated_trip_cost", "last_trip_date",
+        "fuel_count_month", "fuel_count_year", "fuel_cost_per_km_month", "total_cost_per_km_month",
+        "fuel_cost_per_km_year", "total_cost_per_km_year", "fuel_cost_per_km_all", "total_cost_per_km_all",
         "fuel_price_min_year", "fuel_price_max_year", "fuel_price_min_all", "fuel_price_max_all",
         "consumption_min_year", "consumption_max_year", "consumption_min_all", "consumption_max_all",
       ];
       // React only when Fuelio values change, not on every unrelated HA state update.
       const signature = sensorKeys.map((key) => {
         const entry = this._state(key);
-        return entry ? `${entry.state}|${entry.last_updated || ""}|${key === "monthly_cost_breakdown" ? JSON.stringify(entry.attributes?.months || []) : (entry.attributes?.recorded_on || "")}` : "missing";
+        return entry ? `${entry.state}|${entry.last_updated || ""}|${key === "monthly_cost_breakdown" ? JSON.stringify([entry.attributes?.months || [], entry.attributes?.years || [], entry.attributes?.categories_all || []]) : (entry.attributes?.recorded_on || "")}` : "missing";
       }).join(";");
       if (signature === this._signature) return;
       this._signature = signature;
@@ -173,8 +185,11 @@ const ENTITY_SLUGS = Object.freeze({
       const allMonths = this._months();
       if (!this._month || !allMonths.some((row) => row.month === this._month)) this._month = allMonths[0]?.month || null;
       const selected = allMonths.find((row) => row.month === this._month);
-      const currentYear = allMonths[0]?.month?.slice(0, 4) || String(new Date().getFullYear());
-      const yearTotal = allMonths.filter((item) => item.month.startsWith(`${currentYear}-`)).reduce((sum, item) => sum + item.total, 0);
+      const currentYear = selected?.month?.slice(0, 4) || allMonths[0]?.month?.slice(0, 4) || String(new Date().getFullYear());
+      const allYears = this._state("monthly_cost_breakdown")?.attributes?.years || [];
+      const selectedYear = Array.isArray(allYears) ? allYears.find((item) => String(item.year) === currentYear) : null;
+      const yearTotal = selectedYear?.total ?? allMonths.filter((item) => item.month.startsWith(`${currentYear}-`)).reduce((sum, item) => sum + item.total, 0);
+      const categories = (values, heading) => `<div class="section-title">${esc(heading)}</div>${Array.isArray(values) && values.length ? `<div class="category-list">${values.map((item) => `<div class="category-row"><span>${esc(item.name)}</span><strong>${esc(kroner(item.amount))}</strong></div>`).join("")}</div>` : `<div class="notice">Inga kategoriserade utgifter för perioden.</div>`}`;
       const historyTruncated = this._state("monthly_cost_breakdown")?.attributes?.history_truncated === true;
       const title = typeof this._config.title === "string" ? this._config.title : "Fuelio · Bilöversikt";
       const isAvailable = valid(this._state("monthly_cost_breakdown"));
@@ -182,7 +197,7 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
         ${this._tile("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
         ${this._tile("💰", "Literpris", decimal(this._value("last_fuel_price"), "kr/L"))}
-        ${this._tile("🧾", "Tankningar", decimal(this._value("fuel_count"), "st"))}
+        ${this._tile("💳", "Faktisk kostnad", kroner(this._value("total_actual_cost")))}
       </div>`;
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total))}
@@ -196,12 +211,28 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("💳", "Totalt", kroner(selected?.total))}
         ${this._tile("📉", "Uppskattad körkostnad", kroner(this._value("estimated_trip_cost")), "Hela exporten · ej faktisk utgift")}
       </div><div class="summary"><span><strong>Totalt sedan importstart</strong><br><span class="muted">Bränsle ${esc(kroner(this._value("fuel_cost")))} · Övrigt ${esc(kroner(this._value("other_expenses")))}</span></span><strong>${esc(kroner(this._value("total_actual_cost")))}</strong></div>
+      ${categories(selected?.categories, "Utgifter per kategori · vald månad")}
+      ${categories(selectedYear?.categories, `Utgifter per kategori · år ${currentYear}`)}
+      <div class="section-title">Kostnad per registrerad reskilometer</div>
+      <div class="grid">
+        ${this._tile("⛽", "Bränsle · månad", decimal(selected?.fuel_per_logged_km, "kr/km"))}
+        ${this._tile("💳", "Totalt · månad", decimal(selected?.total_per_logged_km, "kr/km"))}
+        ${this._tile("⛽", `Bränsle · ${currentYear}`, decimal(selectedYear?.fuel_per_logged_km, "kr/km"))}
+        ${this._tile("💳", `Totalt · ${currentYear}`, decimal(selectedYear?.total_per_logged_km, "kr/km"))}
+        ${this._tile("⛽", "Bränsle · sedan start", decimal(this._value("fuel_cost_per_km_all"), "kr/km"))}
+        ${this._tile("💳", "Totalt · sedan start", decimal(this._value("total_cost_per_km_all"), "kr/km"))}
+      </div>
+      <div class="notice">Kostnader ÷ registrerade reskilometer under samma kalenderperiod. Ej bilens exakta kr/km om resloggen är ofullständig. Saknas registrerade km visas —. En ny tankning uppdaterar beloppen vid nästa ZIP-inläsning.</div>
       ${historyTruncated ? `<div class="notice">Månadsväljaren visar de senaste 120 månaderna. Livstidssumman inkluderar även äldre data.</div>` : ""}`;
       const fuel = `<div class="grid">
         ${this._tile("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"), "Rapporterat värde, inte livstidssnitt")}
         ${this._tile("💰", "Senaste literpris", decimal(this._value("last_fuel_price"), "kr/L"))}
         ${this._tile("🛢️", "Tankad volym", decimal(this._value("fuel_litres"), "L"), "Sedan importstart")}
         ${this._tile("📆", "Senaste tankning", date(this._state("last_fillup_date")?.state))}
+      </div><div class="section-title">Antal tankningar</div><div class="grid">
+        ${this._tile("📅", "Vald månad", decimal(selected?.fuel_ups, "st"))}
+        ${this._tile("🗓️", `År ${currentYear}`, decimal(selectedYear?.fuel_ups, "st"))}
+        ${this._tile("⛽", "Sedan importstart", decimal(this._value("fuel_count"), "st"))}
       </div>`;
       const records = `<div class="section-title">Literpris · kalenderåret</div><div class="grid records">
         ${this._recordTile("fuel_price_min_year", "Lägsta i år", "kr/L")}

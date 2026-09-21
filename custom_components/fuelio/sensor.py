@@ -40,6 +40,16 @@ DESCRIPTIONS: tuple[FuelioSensorDescription, ...] = (
     FuelioSensorDescription(key="total_actual_cost", name="Total actual expenditure", native_unit_of_measurement="SEK", device_class=SensorDeviceClass.MONETARY),
     FuelioSensorDescription(key="last_trip_date", name="Last trip", device_class=SensorDeviceClass.DATE),
     FuelioSensorDescription(key="latest_odometer_km", name="Latest odometer", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE),
+    # Six explicit calendar/lifetime ratios and two period-specific fill-up counters.
+    # Distance denominator: trips actually logged in the same period, not all odometer travel.
+    FuelioSensorDescription(key="fuel_count_month", name="Fuel-ups this month", icon="mdi:gas-station"),
+    FuelioSensorDescription(key="fuel_count_year", name="Fuel-ups this year", icon="mdi:gas-station"),
+    FuelioSensorDescription(key="fuel_cost_per_km_month", name="Fuel cost per logged km this month", native_unit_of_measurement="SEK/km", icon="mdi:cash"),
+    FuelioSensorDescription(key="total_cost_per_km_month", name="Total cost per logged km this month", native_unit_of_measurement="SEK/km", icon="mdi:cash-multiple"),
+    FuelioSensorDescription(key="fuel_cost_per_km_year", name="Fuel cost per logged km this year", native_unit_of_measurement="SEK/km", icon="mdi:cash"),
+    FuelioSensorDescription(key="total_cost_per_km_year", name="Total cost per logged km this year", native_unit_of_measurement="SEK/km", icon="mdi:cash-multiple"),
+    FuelioSensorDescription(key="fuel_cost_per_km_all", name="Fuel cost per logged km since import start", native_unit_of_measurement="SEK/km", icon="mdi:cash"),
+    FuelioSensorDescription(key="total_cost_per_km_all", name="Total cost per logged km since import start", native_unit_of_measurement="SEK/km", icon="mdi:cash-multiple"),
     # Eight real-observation extremes. Attribute recorded_on is the newest date on ties.
     FuelioSensorDescription(key="fuel_price_min_year", name="Lowest fuel price this year", native_unit_of_measurement="SEK/L", icon="mdi:arrow-down"),
     FuelioSensorDescription(key="fuel_price_max_year", name="Highest fuel price this year", native_unit_of_measurement="SEK/L", icon="mdi:arrow-up"),
@@ -90,6 +100,9 @@ class FuelioSensor(CoordinatorEntity[FuelioCoordinator], SensorEntity):
         if key == "monthly_cost_breakdown":
             return {
                 "months": list(snapshot.monthly_cost_history),
+                "years": list(snapshot.yearly_cost_history),
+                "categories_all": list(snapshot.all_cost_categories),
+                "distance_basis": "logged_trips_only",
                 "history_truncated": snapshot.monthly_history_truncated,
                 "months_limit": 120,
             }

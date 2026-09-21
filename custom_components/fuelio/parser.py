@@ -49,6 +49,16 @@ class FuelioSnapshot:
     record_dates: dict[str, str]
     monthly_cost_history: tuple[dict[str, float | str], ...]
     monthly_history_truncated: bool
+    yearly_cost_history: tuple[dict, ...]
+    all_cost_categories: tuple[dict, ...]
+    fuel_count_month: int
+    fuel_count_year: int
+    fuel_cost_per_km_month: float | None
+    total_cost_per_km_month: float | None
+    fuel_cost_per_km_year: float | None
+    total_cost_per_km_year: float | None
+    fuel_cost_per_km_all: float | None
+    total_cost_per_km_all: float | None
 
 
 def _number(raw: str, *, default: Decimal | None = None) -> Decimal | None:
@@ -141,6 +151,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     estimated_trip_cost = Decimal(0)
     last_trip: date | None = None
     odometers: list[Decimal] = []
+    logged_km_by_month: dict[str, Decimal] = {}
+    logged_km_total = Decimal(0)
     for trip in sections["TripLog"]:
         day = _date(trip["EndDate"])
         distance = _nonnegative(trip["TripDist"], default=Decimal(0))
@@ -151,6 +163,11 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         trip_m += distance
         duration_seconds += duration
         estimated_trip_cost += estimate
+        if day <= today:
+            month_key = day.strftime("%Y-%m")
+            km = distance / 1000
+            logged_km_by_month[month_key] = logged_km_by_month.get(month_key, Decimal(0)) + km
+            logged_km_total += km
         if (day.year, day.month) == (today.year, today.month) and day <= today:
             month_trip_m += distance
         if day <= today and (last_trip is None or day > last_trip):
@@ -167,6 +184,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         return monthly.setdefault(day.strftime("%Y-%m"), {"fuel": Decimal(0), "other": Decimal(0)})
 
     fuel_count = 0
+    fuel_ups_by_month: dict[str, int] = {}
     litres = Decimal(0)
     fuel_cost = Decimal(0)
     month_fuel_cost = Decimal(0)
@@ -181,9 +199,11 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         volume = _nonnegative(fillup["Fuel (litres)"], default=Decimal(0))
         cost = _nonnegative(fillup["Price (optional)"], default=Decimal(0))
         assert volume is not None and cost is not None
-        fuel_count += 1
         if day > today:
             continue
+        fuel_count += 1
+        month_key = day.strftime("%Y-%m")
+        fuel_ups_by_month[month_key] = fuel_ups_by_month.get(month_key, 0) + 1
         litres += volume
         fuel_cost += cost
         bucket(day)["fuel"] += cost
@@ -207,6 +227,18 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             last_fillup = day
             last_price = price if price is not None and price > 0 else (cost / volume if volume else None)
 
+    # CostCategories maps private internal IDs to display labels. Never expose IDs,
+    # individual expense titles, notes or other source records as HA attributes.
+    category_names: dict[str, str] = {}
+    for category in sections.get("CostCategories", []):
+        identifier = category.get("CostTypeID", "").strip()
+        if not identifier:
+            continue
+        if identifier in category_names:
+            raise ValueError("Duplicate Fuelio cost category ID")
+        label = " ".join(category.get("Name", "").split())[:64]
+        category_names[identifier] = label or "Okategoriserat"
+    expense_categories_by_month: dict[str, dict[str, Decimal]] = {}
     expense_count = 0
     expenses = Decimal(0)
     month_expenses = Decimal(0)
@@ -223,6 +255,10 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             continue
         expenses += amount
         bucket(day)["other"] += amount
+        month_key = day.strftime("%Y-%m")
+        label = category_names.get(record.get("CostTypeID", "").strip(), "Okategoriserat")
+        categories = expense_categories_by_month.setdefault(month_key, {})
+        categories[label] = categories.get(label, Decimal(0)) + amount
         if (day.year, day.month) == (today.year, today.month):
             month_expenses += amount
 
@@ -241,16 +277,64 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
                 if recorded_on is not None:
                     record_dates[key] = recorded_on
 
-    # Always include the current month in the selector, even if there are no costs.
+    # Ratios are per *logged trip km*, not a full-vehicle odometer cost. Match
+    # calendar periods of expenses and trips; zero km must NEVER become zero kr/km.
+    def per_logged_km(cost: Decimal, km: Decimal) -> float | None:
+        return rounded(cost / km, 3) if km > 0 else None
+
+    def category_rows(values: dict[str, Decimal]) -> list[dict]:
+        # Cap attributes while preserving sums when many user categories exist.
+        ordered = sorted(values.items(), key=lambda item: (-item[1], item[0]))
+        visible = ordered[:19]
+        remainder = sum((amount for _, amount in ordered[19:]), Decimal(0))
+        rows = [{"name": label, "amount": rounded(amount)} for label, amount in visible]
+        if remainder:
+            rows.append({"name": "Övriga kategorier", "amount": rounded(remainder)})
+        return rows
+
+    # Always include the current month, even if it has neither trips nor costs.
     bucket(today)
-    month_keys = sorted(monthly, reverse=True)
+    month_keys = sorted(set(monthly) | set(logged_km_by_month) | set(fuel_ups_by_month), reverse=True)
+    year_totals: dict[str, dict] = {}
+    all_categories: dict[str, Decimal] = {}
+    for month in month_keys:
+        year = month[:4]
+        year_row = year_totals.setdefault(year, {"fuel": Decimal(0), "other": Decimal(0),
+                                           "km": Decimal(0), "fuel_ups": 0, "categories": {}})
+        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0)})
+        year_row["fuel"] += values["fuel"]
+        year_row["other"] += values["other"]
+        year_row["km"] += logged_km_by_month.get(month, Decimal(0))
+        year_row["fuel_ups"] += fuel_ups_by_month.get(month, 0)
+        for label, amount in expense_categories_by_month.get(month, {}).items():
+            year_row["categories"][label] = year_row["categories"].get(label, Decimal(0)) + amount
+            all_categories[label] = all_categories.get(label, Decimal(0)) + amount
+
+    def period_row(month: str) -> dict:
+        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0)})
+        km = logged_km_by_month.get(month, Decimal(0))
+        return {"month": month, "fuel": rounded(values["fuel"]), "other": rounded(values["other"]),
+                "total": rounded(values["fuel"] + values["other"]), "km": rounded(km, 3),
+                "fuel_ups": fuel_ups_by_month.get(month, 0),
+                "fuel_per_logged_km": per_logged_km(values["fuel"], km),
+                "total_per_logged_km": per_logged_km(values["fuel"] + values["other"], km),
+                "categories": category_rows(expense_categories_by_month.get(month, {}))}
+
     truncated = len(month_keys) > MAX_MONTHS_IN_ATTRIBUTES
-    history = tuple(
-        {"month": key, "fuel": rounded(monthly[key]["fuel"]),
-         "other": rounded(monthly[key]["other"]),
-         "total": rounded(monthly[key]["fuel"] + monthly[key]["other"])}
-        for key in month_keys[:MAX_MONTHS_IN_ATTRIBUTES]
+    history = tuple(period_row(key) for key in month_keys[:MAX_MONTHS_IN_ATTRIBUTES])
+    year_history = tuple(
+        {"year": year, "fuel": rounded(row["fuel"]), "other": rounded(row["other"]),
+         "total": rounded(row["fuel"] + row["other"]), "km": rounded(row["km"], 3),
+         "fuel_ups": row["fuel_ups"],
+         "fuel_per_logged_km": per_logged_km(row["fuel"], row["km"]),
+         "total_per_logged_km": per_logged_km(row["fuel"] + row["other"], row["km"]),
+         "categories": category_rows(row["categories"])}
+        for year, row in sorted(year_totals.items(), reverse=True)[:40]
     )
+    current = year_totals.get(str(today.year), {"fuel": Decimal(0), "other": Decimal(0),
+                                                "km": Decimal(0), "fuel_ups": 0})
+    this_month = today.strftime("%Y-%m")
+    month_km = logged_km_by_month.get(this_month, Decimal(0))
 
     return FuelioSnapshot(
         vehicle_name=name,
@@ -284,6 +368,16 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         record_dates=record_dates,
         monthly_cost_history=history,
         monthly_history_truncated=truncated,
+        yearly_cost_history=year_history,
+        all_cost_categories=tuple(category_rows(all_categories)),
+        fuel_count_month=fuel_ups_by_month.get(this_month, 0),
+        fuel_count_year=current["fuel_ups"],
+        fuel_cost_per_km_month=per_logged_km(month_fuel_cost, month_km),
+        total_cost_per_km_month=per_logged_km(month_fuel_cost + month_expenses, month_km),
+        fuel_cost_per_km_year=per_logged_km(current["fuel"], current["km"]),
+        total_cost_per_km_year=per_logged_km(current["fuel"] + current["other"], current["km"]),
+        fuel_cost_per_km_all=per_logged_km(fuel_cost, logged_km_total),
+        total_cost_per_km_all=per_logged_km(fuel_cost + expenses, logged_km_total),
     )
 
 
