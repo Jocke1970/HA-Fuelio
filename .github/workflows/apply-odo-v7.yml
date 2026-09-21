@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           python tools/apply_odometer_v7.py
-          python tools/finish_odometer_v7.py
+          python tools/finish_odometer_v7b.py
           python -m compileall -q custom_components tests
           python -m unittest discover -s tests -v
           node --check custom_components/fuelio/www/ha-fuelio-card.js
