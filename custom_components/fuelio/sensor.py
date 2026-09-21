@@ -1,4 +1,4 @@
-"""Summary-only Fuelio sensors; never expose GPS or identifying attributes."""
+"""Aggregate-only Fuelio sensors: never expose raw trips, GPS or identifiers."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,10 +16,11 @@ from .const import DOMAIN
 
 @dataclass(frozen=True, kw_only=True)
 class FuelioSensorDescription(SensorEntityDescription):
-    """Description mapping one sensor to a snapshot field."""
+    """Description mapping a sensor to one aggregate snapshot field."""
 
 
 DESCRIPTIONS: tuple[FuelioSensorDescription, ...] = (
+    # Stable beta.3 entities: do not rename keys or change the unique_id formula.
     FuelioSensorDescription(key="trip_count", name="Trips", icon="mdi:routes"),
     FuelioSensorDescription(key="trip_distance_km", name="Trip distance", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE, state_class=SensorStateClass.TOTAL),
     FuelioSensorDescription(key="monthly_trip_distance_km", name="Trip distance this month", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE),
@@ -39,17 +40,28 @@ DESCRIPTIONS: tuple[FuelioSensorDescription, ...] = (
     FuelioSensorDescription(key="total_actual_cost", name="Total actual expenditure", native_unit_of_measurement="SEK", device_class=SensorDeviceClass.MONETARY),
     FuelioSensorDescription(key="last_trip_date", name="Last trip", device_class=SensorDeviceClass.DATE),
     FuelioSensorDescription(key="latest_odometer_km", name="Latest odometer", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE),
+    # Eight real-observation extremes. Attribute recorded_on is the newest date on ties.
+    FuelioSensorDescription(key="fuel_price_min_year", name="Lowest fuel price this year", native_unit_of_measurement="SEK/L", icon="mdi:arrow-down"),
+    FuelioSensorDescription(key="fuel_price_max_year", name="Highest fuel price this year", native_unit_of_measurement="SEK/L", icon="mdi:arrow-up"),
+    FuelioSensorDescription(key="fuel_price_min_all", name="Lowest fuel price since import start", native_unit_of_measurement="SEK/L", icon="mdi:arrow-down"),
+    FuelioSensorDescription(key="fuel_price_max_all", name="Highest fuel price since import start", native_unit_of_measurement="SEK/L", icon="mdi:arrow-up"),
+    FuelioSensorDescription(key="consumption_min_year", name="Lowest reported consumption this year", native_unit_of_measurement="L/100km", icon="mdi:arrow-down"),
+    FuelioSensorDescription(key="consumption_max_year", name="Highest reported consumption this year", native_unit_of_measurement="L/100km", icon="mdi:arrow-up"),
+    FuelioSensorDescription(key="consumption_min_all", name="Lowest reported consumption since import start", native_unit_of_measurement="L/100km", icon="mdi:arrow-down"),
+    FuelioSensorDescription(key="consumption_max_all", name="Highest reported consumption since import start", native_unit_of_measurement="L/100km", icon="mdi:arrow-up"),
+    # This entity's attributes contain aggregate-only YYYY-MM totals, max 120 months.
+    FuelioSensorDescription(key="monthly_cost_breakdown", name="Monthly cost breakdown", native_unit_of_measurement="SEK", device_class=SensorDeviceClass.MONETARY, icon="mdi:calendar-month"),
 )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Create summary sensor entities for one vehicle."""
+    """Create summary sensors for one configured vehicle."""
     coordinator: FuelioCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(FuelioSensor(coordinator, entry, description) for description in DESCRIPTIONS)
 
 
 class FuelioSensor(CoordinatorEntity[FuelioCoordinator], SensorEntity):
-    """Expose an individual snapshot field."""
+    """Expose only one aggregate value and, optionally, bounded aggregate attributes."""
 
     _attr_has_entity_name = True
 
@@ -65,5 +77,22 @@ class FuelioSensor(CoordinatorEntity[FuelioCoordinator], SensorEntity):
 
     @property
     def native_value(self):
-        """Read one summary value; raw routes and locations never leave parser."""
+        """Read one summary; no source rows leave the parser."""
+        if self.entity_description.key == "monthly_cost_breakdown":
+            return round(self.coordinator.data.monthly_fuel_cost + self.coordinator.data.monthly_other_expenses, 2)
         return getattr(self.coordinator.data, self.entity_description.key)
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Expose dates for records or a capped, identifier-free monthly summary."""
+        key = self.entity_description.key
+        snapshot = self.coordinator.data
+        if key == "monthly_cost_breakdown":
+            return {
+                "months": list(snapshot.monthly_cost_history),
+                "history_truncated": snapshot.monthly_history_truncated,
+                "months_limit": 120,
+            }
+        if key in snapshot.record_dates:
+            return {"recorded_on": snapshot.record_dates[key]}
+        return None
