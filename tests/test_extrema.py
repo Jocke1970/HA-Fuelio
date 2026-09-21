@@ -20,8 +20,8 @@ class FuelioExtremaTests(unittest.TestCase):
         self.assertEqual(snapshot.record_dates["fuel_price_max_all"], "2026-09-10")
         self.assertEqual(snapshot.consumption_min_year, 6)
         self.assertEqual(snapshot.consumption_max_all, 6)
-        self.assertEqual(snapshot.monthly_cost_history[0], {"month": "2026-09", "fuel": 1000.0, "other": 200.0, "total": 1200.0})
-        self.assertEqual(snapshot.monthly_cost_history[1], {"month": "2026-08", "fuel": 800.0, "other": 0.0, "total": 800.0})
+        self.assertEqual({k: snapshot.monthly_cost_history[0][k] for k in ("month", "fuel", "other", "total")}, {"month": "2026-09", "fuel": 1000.0, "other": 200.0, "total": 1200.0})
+        self.assertEqual({k: snapshot.monthly_cost_history[1][k] for k in ("month", "fuel", "other", "total")}, {"month": "2026-08", "fuel": 800.0, "other": 0.0, "total": 800.0})
         self.assertFalse(snapshot.monthly_history_truncated)
         self.assertNotIn("5000", str(snapshot.monthly_cost_history))
 
@@ -84,14 +84,14 @@ class FuelioExtremaTests(unittest.TestCase):
         self.assertEqual(len(snapshot.monthly_cost_history), 120)
         self.assertEqual(snapshot.monthly_cost_history[0]["month"], "2026-09")
         self.assertEqual(snapshot.monthly_cost_history[-1]["month"], "2010-08")
-        self.assertTrue(all(set(month) == {"month", "fuel", "other", "total"} for month in snapshot.monthly_cost_history))
+        self.assertTrue(all({"month", "fuel", "other", "total"}.issubset(month) for month in snapshot.monthly_cost_history))
         self.assertNotIn("Test vehicle", repr(snapshot))
 
     def test_existing_ids_unchanged_and_nine_new_entities(self):
         path = Path(__file__).resolve().parents[1] / "custom_components" / "fuelio" / "sensor.py"
         source = path.read_text(encoding="utf-8")
         keys = re.findall(r'FuelioSensorDescription\(key="([^"]+)"', source)
-        self.assertEqual(len(keys), 28)
+        self.assertEqual(len(keys), 36)
         self.assertEqual(len(keys), len(set(keys)))
         self.assertIn('f"{entry.entry_id}_{description.key}"', source)
         self.assertIn('identifiers={(DOMAIN, entry.entry_id)}', source)

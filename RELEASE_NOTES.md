@@ -1,18 +1,12 @@
-# HA-Fuelio v0.1.0-beta.5 🚙
+# HA-Fuelio v0.1.0-beta.6 🚙
 
-**Experimental frontend hotfix for beta.4.** Beta.4 screenshot showed the most recent litre price but blank older summaries, month history and record tiles. The card wrongly assumed `SensorEntityDescription.key` equals the generated Home Assistant entity ID, and wrongly assumed pre-existing and new entities always share the same prefix.
+Experimental period analytics release based on the beta.5 dashboard tests.
 
-## Fixed
-- Map all 28 backend keys to their actual name-derived entity-ID suffixes; resolve entities using Home Assistant's read-only entity registry and the configured vehicle's `device_id`. Keep one vehicle's entities separated from other Fuelio vehicles, even when their generated prefixes differ.
-- Accept the original dashboard YAML `entity: sensor.mmk912_monthly_cost_breakdown` as a vehicle hint when that newly generated ID differs, provided the old fuel price entity still exists. You may alternatively configure the actual monthly breakdown entity ID. Do not rename any entities for this fix.
-- Card version and resource cache-buster `0.1.0-beta.5`; Python manifest bumped but backend aggregation logic and the original 28 sensor unique IDs are unchanged.
-- Regression tests exercise the real beta.3 name-derived IDs, the new generic-prefix IDs, monthly cost attributes, record dates, isolation from an unrelated vehicle and the existing synthetic frontend test.
+- Add six read-only SEK/km sensors: fuel and all actual spending for current calendar month, calendar year, and full imported history. Denominator is **logged trip km in the SAME period**, not total vehicle mileage. No logged km yields `unknown`, not zero. A new valid ZIP updates ratios on the existing five-minute polling cycle.
+- Add current month and year fill-up count sensors; lifetime fill-up count remains existing stable sensor. Future-dated fill-ups are not counted.
+- Parse optional `CostCategories` (`CostTypeID` → `Name`) and join actual `Costs.CostTypeID`; exclude templates, incomes and future expenses. Unknown category ID or missing section is `Okategoriserat`. Expose only aggregated name/amount, never private cost titles, notes, category internal IDs or raw rows.
+- Monthly cost breakdown attributes now include logged km, fuel-ups, both cost/km ratios and category totals; add year aggregates and lifetime category totals. Attribute summaries are capped (120 months, 40 years, 20 category rows per group), with excess names combined under `Övriga kategorier`.
+- The card shows per-category expenses, six period cost/km tiles, and a separate month/year/lifetime fill-up section; no false whole-vehicle cost/km claim. Four-column mode now requires >=850px.
+- Preserve the existing 28 sensor IDs and unique IDs; eight new sensors bring the integration to **36 sensors**. Existing ZIP paths remain unchanged.
 
-## Upgrade and install frontend again
-1. Update the existing HACS Fuelio integration to `v0.1.0-beta.5`, restart Home Assistant; do not remove/re-add the integration or replace the private ZIP.
-2. Run in HA terminal: `mkdir -p /config/www && cp /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuelio-card.js && ls -lh /config/www/ha-fuelio-card.js`.
-3. Change the existing single Lovelace JavaScript module resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.5`. Refresh the browser fully.
-4. Keep the existing YAML `type: custom:ha-fuelio-card`, `entity: sensor.mmk912_monthly_cost_breakdown`, `title: Fuelio · Bilöversikt`. If the dashboard was configured with another vehicle, use an existing or actual new `monthly_cost_breakdown` entity for that vehicle.
-5. Check 28 registered sensors and all fields; compare extrema and month totals with your private Fuelio export. A legitimately absent individual reported consumption may still show `—`.
-
-No backend service calls, Google Drive sync, service intervals, tank level or range are added. This is a prerelease. Keep the known beta.4 tag and stable `main` unchanged until real HA testing.
+Upgrade the integration in HACS and restart. Re-copy `custom_components/fuelio/www/ha-fuelio-card.js` to `/config/www/ha-fuelio-card.js`, update the SINGLE Lovelace resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.6`, then hard refresh. Keep existing card YAML. Compare categories and cost/km with your private Fuelio backup in real HA before stable promotion. `main` remains unchanged.
