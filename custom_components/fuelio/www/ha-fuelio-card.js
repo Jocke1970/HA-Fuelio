@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.6 — self-contained, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.7 — self-contained, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.6";
+  const CARD_VERSION = "0.1.0-beta.7";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -193,11 +193,17 @@ const ENTITY_SLUGS = Object.freeze({
       const historyTruncated = this._state("monthly_cost_breakdown")?.attributes?.history_truncated === true;
       const title = typeof this._config.title === "string" ? this._config.title : "Fuelio · Bilöversikt";
       const isAvailable = valid(this._state("monthly_cost_breakdown"));
+      // The overview is always the CURRENT calendar month, independent of the
+      // user's separate historical month selector in the Costs section.
+      const nowMonth = allMonths[0];
+      const odoNote = (period) => period?.odo_coverage === "partial_start" ?
+        `Delperiod: ${period.odo_start_on || "första avläsning"} → ${period.odo_end_on || "senaste avläsning"}` :
+        period?.odo_start_on && period?.odo_end_on ? `${period.odo_start_on} → ${period.odo_end_on}` : "Avläsningar saknas";
       const overview = `<div class="grid">
-        ${this._tile("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
-        ${this._tile("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
-        ${this._tile("💰", "Literpris", decimal(this._value("last_fuel_price"), "kr/L"))}
-        ${this._tile("💳", "Faktisk kostnad", kroner(this._value("total_actual_cost")))}
+        ${this._tile("🛣️", "Mätarställning / denna månads körsträcka", decimal(this._value("latest_odometer_km"), "km"), `${decimal(nowMonth?.km, "km denna månad")} · ${odoNote(nowMonth)}`)}
+        ${this._tile("⛽", "Tankat denna månad", decimal(nowMonth?.litres, "L"))}
+        ${this._tile("💳", "Kostnader denna månad", kroner(nowMonth?.total))}
+        ${this._tile("📏", "Kostnad/km denna månad", decimal(nowMonth?.total_per_logged_km, "kr/km"), "Avläst ODO, ej resloggens summa")}
       </div>`;
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total))}
@@ -209,20 +215,20 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("⛽", "Bränsle", kroner(selected?.fuel))}
         ${this._tile("🧾", "Övriga utgifter", kroner(selected?.other))}
         ${this._tile("💳", "Totalt", kroner(selected?.total))}
-        ${this._tile("📉", "Uppskattad körkostnad", kroner(this._value("estimated_trip_cost")), "Hela exporten · ej faktisk utgift")}
       </div><div class="summary"><span><strong>Totalt sedan importstart</strong><br><span class="muted">Bränsle ${esc(kroner(this._value("fuel_cost")))} · Övrigt ${esc(kroner(this._value("other_expenses")))}</span></span><strong>${esc(kroner(this._value("total_actual_cost")))}</strong></div>
       ${categories(selected?.categories, "Utgifter per kategori · vald månad")}
       ${categories(selectedYear?.categories, `Utgifter per kategori · år ${currentYear}`)}
-      <div class="section-title">Kostnad per registrerad reskilometer</div>
+      <div class="summary"><span>Uppskattad resekostnad · hela importen (inte faktisk utgift)</span><strong>${esc(kroner(this._value("estimated_trip_cost")))}</strong></div>
+      <div class="section-title">Kostnad per avläst ODO-kilometer</div>
       <div class="grid">
-        ${this._tile("⛽", "Bränsle · månad", decimal(selected?.fuel_per_logged_km, "kr/km"))}
-        ${this._tile("💳", "Totalt · månad", decimal(selected?.total_per_logged_km, "kr/km"))}
-        ${this._tile("⛽", `Bränsle · ${currentYear}`, decimal(selectedYear?.fuel_per_logged_km, "kr/km"))}
-        ${this._tile("💳", `Totalt · ${currentYear}`, decimal(selectedYear?.total_per_logged_km, "kr/km"))}
+        ${this._tile("⛽", "Bränsle · månad", decimal(selected?.fuel_per_logged_km, "kr/km"), odoNote(selected))}
+        ${this._tile("💳", "Totalt · månad", decimal(selected?.total_per_logged_km, "kr/km"), odoNote(selected))}
+        ${this._tile("⛽", `Bränsle · ${currentYear}`, decimal(selectedYear?.fuel_per_logged_km, "kr/km"), odoNote(selectedYear))}
+        ${this._tile("💳", `Totalt · ${currentYear}`, decimal(selectedYear?.total_per_logged_km, "kr/km"), odoNote(selectedYear))}
         ${this._tile("⛽", "Bränsle · sedan start", decimal(this._value("fuel_cost_per_km_all"), "kr/km"))}
         ${this._tile("💳", "Totalt · sedan start", decimal(this._value("total_cost_per_km_all"), "kr/km"))}
       </div>
-      <div class="notice">Kostnader ÷ registrerade reskilometer under samma kalenderperiod. Ej bilens exakta kr/km om resloggen är ofullständig. Saknas registrerade km visas —. En ny tankning uppdaterar beloppen vid nästa ZIP-inläsning.</div>
+      <div class="notice">Kostnader ÷ ODO-differens, från senaste avläsning före periodstart till senaste inom perioden. Saknas tidigare avläsning räknas bara körning efter första avläsningen och perioden markeras som ofullständig. Saknas användbar differens visas —. Tankningar uppdaterar belopp och mätarställning vid nästa ZIP-inläsning.</div>
       ${historyTruncated ? `<div class="notice">Månadsväljaren visar de senaste 120 månaderna. Livstidssumman inkluderar även äldre data.</div>` : ""}`;
       const fuel = `<div class="grid">
         ${this._tile("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"), "Rapporterat värde, inte livstidssnitt")}

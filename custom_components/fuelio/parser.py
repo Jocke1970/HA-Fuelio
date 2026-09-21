@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from io import StringIO
 from pathlib import Path
@@ -49,6 +49,8 @@ class FuelioSnapshot:
     record_dates: dict[str, str]
     monthly_cost_history: tuple[dict[str, float | str], ...]
     monthly_history_truncated: bool
+    odometer_lifetime_km: float | None
+    odometer_lifetime_coverage: dict
     yearly_cost_history: tuple[dict, ...]
     all_cost_categories: tuple[dict, ...]
     fuel_count_month: int
@@ -151,6 +153,14 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     estimated_trip_cost = Decimal(0)
     last_trip: date | None = None
     odometers: list[Decimal] = []
+    # Date-stamped odometer checkpoints, from tankings and OBD trip boundaries.
+    # No trip coordinates, routes, vehicle identifiers or raw rows are retained.
+    odometer_by_day: dict[date, list[Decimal]] = {}
+
+    def observe_odometer(day: date, value: Decimal | None) -> None:
+        if value is not None and value > 0 and day <= today:
+            odometers.append(value)
+            odometer_by_day.setdefault(day, []).append(value)
     logged_km_by_month: dict[str, Decimal] = {}
     logged_km_total = Decimal(0)
     for trip in sections["TripLog"]:
@@ -172,16 +182,18 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             month_trip_m += distance
         if day <= today and (last_trip is None or day > last_trip):
             last_trip = day
-        for key in ("StartOdo", "EndOdo"):
-            odo = _nonnegative(trip.get(key, ""))
-            if odo is not None and odo > 0 and day <= today:
-                odometers.append(odo)
+        # Use the actual StartDate when present, otherwise the trip's EndDate.
+        # Start/EndOdo may straddle a calendar boundary, unlike TripDist.
+        start_day = _date(trip["StartDate"]) if trip.get("StartDate", "").strip() else day
+        if start_day <= day and day <= today:
+            observe_odometer(start_day, _nonnegative(trip.get("StartOdo", "")))
+            observe_odometer(day, _nonnegative(trip.get("EndOdo", "")))
 
     # Monthly values are aggregate-only and capped before exposing as HA attributes.
     monthly: dict[str, dict[str, Decimal]] = {}
 
     def bucket(day: date) -> dict[str, Decimal]:
-        return monthly.setdefault(day.strftime("%Y-%m"), {"fuel": Decimal(0), "other": Decimal(0)})
+        return monthly.setdefault(day.strftime("%Y-%m"), {"fuel": Decimal(0), "other": Decimal(0), "litres": Decimal(0)})
 
     fuel_count = 0
     fuel_ups_by_month: dict[str, int] = {}
@@ -207,11 +219,10 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         litres += volume
         fuel_cost += cost
         bucket(day)["fuel"] += cost
+        bucket(day)["litres"] += volume
         if (day.year, day.month) == (today.year, today.month):
             month_fuel_cost += cost
-        odo = _nonnegative(fillup.get("Odo (km)", ""))
-        if odo is not None and odo > 0:
-            odometers.append(odo)
+        observe_odometer(day, _nonnegative(fillup.get("Odo (km)", "")))
         reported = _nonnegative(fillup.get("l/100km (optional)", ""))
         if reported is not None and (last_consumption_day is None or day > last_consumption_day):
             last_consumption_day = day
@@ -277,10 +288,41 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
                 if recorded_on is not None:
                     record_dates[key] = recorded_on
 
-    # Ratios are per *logged trip km*, not a full-vehicle odometer cost. Match
-    # calendar periods of expenses and trips; zero km must NEVER become zero kr/km.
-    def per_logged_km(cost: Decimal, km: Decimal) -> float | None:
-        return rounded(cost / km, 3) if km > 0 else None
+    # A period uses the most recent ODO checkpoint BEFORE its first day and
+    # the latest checkpoint inside that period. Thus missing a reading on the
+    # month's last day does not invalidate a month, and successive months share
+    # a consistent boundary checkpoint. This is observed, not exact-midnight km.
+    # First imported period has no earlier checkpoint: measure from its first
+    # in-period reading and explicitly mark incomplete coverage.
+    odometer_days = sorted(odometer_by_day)
+
+    def odometer_distance(start: date | None, end: date) -> tuple[Decimal | None, dict]:
+        in_period = [day for day in odometer_days if (start is None or day >= start) and day <= end]
+        if not in_period:
+            return None, {"odo_coverage": "unavailable"}
+        last_day = in_period[-1]
+        last = max(odometer_by_day[last_day])
+        prior = [day for day in odometer_days if start is not None and day < start]
+        if prior:
+            first_day = prior[-1]
+            first = max(odometer_by_day[first_day])
+            coverage = "prior_checkpoint"
+        else:
+            first_day = in_period[0]
+            first = min(odometer_by_day[first_day])
+            coverage = "partial_start" if start is not None else "import_start"
+        if last < first:
+            return None, {"odo_coverage": "invalid_rollback"}
+        # A single reading cannot establish distance. Two checkpoints with the
+        # same value legitimately establish zero distance, not a cost/km value.
+        if first_day == last_day and len(odometer_by_day[first_day]) < 2:
+            return None, {"odo_coverage": "insufficient_readings"}
+        return last - first, {"odo_coverage": coverage,
+                              "odo_start_on": first_day.isoformat(),
+                              "odo_end_on": last_day.isoformat()}
+
+    def per_odometer_km(cost: Decimal, km: Decimal | None) -> float | None:
+        return rounded(cost / km, 3) if km is not None and km > 0 else None
 
     def category_rows(values: dict[str, Decimal]) -> list[dict]:
         # Cap attributes while preserving sums when many user categories exist.
@@ -294,47 +336,65 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
 
     # Always include the current month, even if it has neither trips nor costs.
     bucket(today)
-    month_keys = sorted(set(monthly) | set(logged_km_by_month) | set(fuel_ups_by_month), reverse=True)
+    odo_months = {day.strftime("%Y-%m") for day in odometer_days}
+    month_keys = sorted(set(monthly) | set(logged_km_by_month) | set(fuel_ups_by_month) | odo_months, reverse=True)
+    odo_month_data = {}
+    for key in month_keys:
+        year, month = (int(part) for part in key.split("-"))
+        start = date(year, month, 1)
+        next_month = date(year + (month == 12), (month % 12) + 1, 1)
+        end = min(today, next_month - timedelta(days=1))
+        odo_month_data[key] = odometer_distance(start, end) if end >= start else (None, {"odo_coverage": "unavailable"})
     year_totals: dict[str, dict] = {}
     all_categories: dict[str, Decimal] = {}
     for month in month_keys:
         year = month[:4]
         year_row = year_totals.setdefault(year, {"fuel": Decimal(0), "other": Decimal(0),
-                                           "km": Decimal(0), "fuel_ups": 0, "categories": {}})
-        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0)})
+                                           "km": None, "fuel_ups": 0, "litres": Decimal(0), "categories": {}})
+        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0), "litres": Decimal(0)})
         year_row["fuel"] += values["fuel"]
         year_row["other"] += values["other"]
-        year_row["km"] += logged_km_by_month.get(month, Decimal(0))
+        year_row["litres"] += values["litres"]
         year_row["fuel_ups"] += fuel_ups_by_month.get(month, 0)
         for label, amount in expense_categories_by_month.get(month, {}).items():
             year_row["categories"][label] = year_row["categories"].get(label, Decimal(0)) + amount
             all_categories[label] = all_categories.get(label, Decimal(0)) + amount
 
+    year_odo_data = {}
+    for year in year_totals:
+        beginning = date(int(year), 1, 1)
+        ending = min(today, date(int(year), 12, 31))
+        year_odo_data[year] = odometer_distance(beginning, ending)
+        year_totals[year]["km"] = year_odo_data[year][0]
+    lifetime_km, lifetime_coverage = odometer_distance(None, today)
+
     def period_row(month: str) -> dict:
-        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0)})
-        km = logged_km_by_month.get(month, Decimal(0))
+        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0), "litres": Decimal(0)})
+        km, coverage = odo_month_data[month]
         return {"month": month, "fuel": rounded(values["fuel"]), "other": rounded(values["other"]),
-                "total": rounded(values["fuel"] + values["other"]), "km": rounded(km, 3),
-                "fuel_ups": fuel_ups_by_month.get(month, 0),
-                "fuel_per_logged_km": per_logged_km(values["fuel"], km),
-                "total_per_logged_km": per_logged_km(values["fuel"] + values["other"], km),
-                "categories": category_rows(expense_categories_by_month.get(month, {}))}
+                "total": rounded(values["fuel"] + values["other"]), "km": rounded(km, 3) if km is not None else None,
+                "logged_trip_km": rounded(logged_km_by_month.get(month, Decimal(0)), 3),
+                "litres": rounded(values["litres"], 3), "fuel_ups": fuel_ups_by_month.get(month, 0),
+                "fuel_per_logged_km": per_odometer_km(values["fuel"], km),
+                "total_per_logged_km": per_odometer_km(values["fuel"] + values["other"], km),
+                "categories": category_rows(expense_categories_by_month.get(month, {})), **coverage}
 
     truncated = len(month_keys) > MAX_MONTHS_IN_ATTRIBUTES
     history = tuple(period_row(key) for key in month_keys[:MAX_MONTHS_IN_ATTRIBUTES])
     year_history = tuple(
         {"year": year, "fuel": rounded(row["fuel"]), "other": rounded(row["other"]),
-         "total": rounded(row["fuel"] + row["other"]), "km": rounded(row["km"], 3),
-         "fuel_ups": row["fuel_ups"],
-         "fuel_per_logged_km": per_logged_km(row["fuel"], row["km"]),
-         "total_per_logged_km": per_logged_km(row["fuel"] + row["other"], row["km"]),
-         "categories": category_rows(row["categories"])}
+         "total": rounded(row["fuel"] + row["other"]),
+         "km": rounded(row["km"], 3) if row["km"] is not None else None,
+         "litres": rounded(row["litres"], 3), "fuel_ups": row["fuel_ups"],
+         "fuel_per_logged_km": per_odometer_km(row["fuel"], row["km"]),
+         "total_per_logged_km": per_odometer_km(row["fuel"] + row["other"], row["km"]),
+         "categories": category_rows(row["categories"]), **year_odo_data[year][1]}
         for year, row in sorted(year_totals.items(), reverse=True)[:40]
     )
     current = year_totals.get(str(today.year), {"fuel": Decimal(0), "other": Decimal(0),
-                                                "km": Decimal(0), "fuel_ups": 0})
+                                                "km": None, "fuel_ups": 0})
     this_month = today.strftime("%Y-%m")
-    month_km = logged_km_by_month.get(this_month, Decimal(0))
+    month_km = odo_month_data[this_month][0]
 
     return FuelioSnapshot(
         vehicle_name=name,
@@ -368,16 +428,18 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         record_dates=record_dates,
         monthly_cost_history=history,
         monthly_history_truncated=truncated,
+        odometer_lifetime_km=rounded(lifetime_km, 3) if lifetime_km is not None else None,
+        odometer_lifetime_coverage=lifetime_coverage,
         yearly_cost_history=year_history,
         all_cost_categories=tuple(category_rows(all_categories)),
         fuel_count_month=fuel_ups_by_month.get(this_month, 0),
         fuel_count_year=current["fuel_ups"],
-        fuel_cost_per_km_month=per_logged_km(month_fuel_cost, month_km),
-        total_cost_per_km_month=per_logged_km(month_fuel_cost + month_expenses, month_km),
-        fuel_cost_per_km_year=per_logged_km(current["fuel"], current["km"]),
-        total_cost_per_km_year=per_logged_km(current["fuel"] + current["other"], current["km"]),
-        fuel_cost_per_km_all=per_logged_km(fuel_cost, logged_km_total),
-        total_cost_per_km_all=per_logged_km(fuel_cost + expenses, logged_km_total),
+        fuel_cost_per_km_month=per_odometer_km(month_fuel_cost, month_km),
+        total_cost_per_km_month=per_odometer_km(month_fuel_cost + month_expenses, month_km),
+        fuel_cost_per_km_year=per_odometer_km(current["fuel"], current["km"]),
+        total_cost_per_km_year=per_odometer_km(current["fuel"] + current["other"], current["km"]),
+        fuel_cost_per_km_all=per_odometer_km(fuel_cost, lifetime_km),
+        total_cost_per_km_all=per_odometer_km(fuel_cost + expenses, lifetime_km),
     )
 
 
