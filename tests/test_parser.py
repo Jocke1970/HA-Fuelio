@@ -20,7 +20,8 @@ spec.loader.exec_module(parser)
 load_snapshot, parse_backup = parser.load_snapshot, parser.parse_backup
 
 
-def sample_csv(*, metric: bool = True, malformed: bool = False) -> str:
+def sample_csv(*, metric: bool = True, malformed: bool = False,
+               latest_consumption: str = "6", earlier_consumption: str = "") -> str:
     out = StringIO()
     writer = csv.writer(out)
 
@@ -31,8 +32,8 @@ def sample_csv(*, metric: bool = True, malformed: bool = False) -> str:
 
     section("Vehicle", ["Name", "DistUnit", "FuelUnit"], ["Test vehicle", "0" if metric else "1", "0"])
     section("Log", ["Data", "Odo (km)", "Fuel (litres)", "Price (optional)", "VolumePrice", "l/100km (optional)"],
-            ["2026-09-10 11:00", "1000", "50", "1000", "20", "6"],
-            ["2026-08-01 11:00", "900", "40", "800", "20", ""])
+            ["2026-09-10 11:00", "1000", "50", "1000", "20", latest_consumption],
+            ["2026-08-01 11:00", "900", "40", "800", "20", earlier_consumption])
     section("Costs", ["Date", "Cost", "isTemplate", "isIncome"],
             ["2026-09-25 12:00", "500", "0", "0"],
             ["2026-09-15 12:00", "200", "0", "0"],
@@ -67,6 +68,27 @@ class FuelioParserTests(unittest.TestCase):
         self.assertFalse(hasattr(s, "StartLat"))
         self.assertFalse(hasattr(s, "Plate"))
 
+    def test_private_vehicle_name_is_not_retained(self):
+        private_name = "PRIVATE-PLATE-XYZ"
+        backup = sample_csv().replace("Test vehicle", private_name)
+        snapshot = parse_backup(backup, today=date(2026, 9, 21))
+        self.assertEqual(snapshot.vehicle_name, "Fuelio vehicle")
+        self.assertNotIn(private_name, repr(snapshot))
+        flow_source = (parser_path.parent / "config_flow.py").read_text(encoding="utf-8")
+        self.assertIn('title="Fuelio vehicle"', flow_source)
+        self.assertNotIn("snapshot.vehicle_name", flow_source)
+
+    def test_consumption_falls_back_to_last_actual_report(self):
+        snapshot = parse_backup(sample_csv(latest_consumption="", earlier_consumption="5.7"),
+                                today=date(2026, 9, 21))
+        self.assertEqual(snapshot.last_reported_consumption, 5.7)
+        self.assertEqual(snapshot.last_fillup_date, date(2026, 9, 10))
+
+    def test_consumption_stays_missing_when_no_report_exists(self):
+        snapshot = parse_backup(sample_csv(latest_consumption="", earlier_consumption=""),
+                                today=date(2026, 9, 21))
+        self.assertIsNone(snapshot.last_reported_consumption)
+
     def test_reject_nonmetric(self):
         with self.assertRaisesRegex(ValueError, "metric"):
             parse_backup(sample_csv(metric=False))
@@ -85,6 +107,19 @@ class FuelioParserTests(unittest.TestCase):
                 z.writestr("other.csv", sample_csv())
             with self.assertRaisesRegex(ValueError, "one unencrypted"):
                 load_snapshot(str(archive))
+
+    def test_replaced_zip_is_reread_and_missing_file_raises(self):
+        with TemporaryDirectory() as directory:
+            archive = Path(directory) / "synthetic.zip"
+            with ZipFile(archive, "w") as z:
+                z.writestr("export.csv", sample_csv(latest_consumption="6"))
+            self.assertEqual(load_snapshot(str(archive), date(2026, 9, 21)).last_reported_consumption, 6)
+            with ZipFile(archive, "w") as z:
+                z.writestr("export.csv", sample_csv(latest_consumption="7.1"))
+            self.assertEqual(load_snapshot(str(archive), date(2026, 9, 21)).last_reported_consumption, 7.1)
+            archive.unlink()
+            with self.assertRaises(FileNotFoundError):
+                load_snapshot(str(archive), date(2026, 9, 21))
 
     def test_invalid_row_length(self):
         with self.assertRaisesRegex(ValueError, "incorrect number"):
