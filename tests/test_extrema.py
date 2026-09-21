@@ -23,7 +23,7 @@ class FuelioExtremaTests(unittest.TestCase):
         self.assertEqual(snapshot.monthly_cost_history[0], {"month": "2026-09", "fuel": 1000.0, "other": 200.0, "total": 1200.0})
         self.assertEqual(snapshot.monthly_cost_history[1], {"month": "2026-08", "fuel": 800.0, "other": 0.0, "total": 800.0})
         self.assertFalse(snapshot.monthly_history_truncated)
-        self.assertNotIn("5000", str(snapshot.monthly_cost_history))  # Template cost excluded.
+        self.assertNotIn("5000", str(snapshot.monthly_cost_history))
 
     def test_calendar_year_and_lifetime_do_not_mix(self):
         csv = sample_csv(latest_consumption="", earlier_consumption="5.7")
@@ -74,7 +74,11 @@ class FuelioExtremaTests(unittest.TestCase):
             year = 2010 + n // 12
             month = n % 12 + 1
             lines.append(f"{year:04d}-{month:02d}-01 12:00,1,0,0")
-        csv = sample_csv().replace("## TripLog\n", "\n".join(lines) + "\n## TripLog\n")
+        csv = sample_csv()
+        newline = "\r\n" if "\r\n" in csv else "\n"
+        marker = "## TripLog" + newline
+        self.assertIn(marker, csv)
+        csv = csv.replace(marker, newline.join(lines) + newline + marker)
         snapshot = parse_backup(csv, today=date(2026, 9, 21))
         self.assertTrue(snapshot.monthly_history_truncated)
         self.assertEqual(len(snapshot.monthly_cost_history), 120)
