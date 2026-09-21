@@ -1,6 +1,9 @@
 # HA-Fuelio 🚙
 
-Read-only Home Assistant custom integration for [Fuelio](https://www.fuel.io/). **`dev` contains an experimental candidate for `v0.1.0-beta.4`; the most recently released beta is `v0.1.0-beta.3`.** Keep Drivvo as a reference until aggregate values and update behavior are verified in real Home Assistant.
+**Beta.5 card hotfix:** The 28 sensor IDs are generated from displayed names rather than Python parser keys; existing entities can keep an old vehicle prefix while new ones use a generic prefix. The card now resolves them through the HA entity/device registry. Upgrade your existing integration and copy the card JS again into `/config/www`, keeping one Lovelace resource at `/local/ha-fuelio-card.js?v=0.1.0-beta.5`. Browser refresh required. No entity renaming or new ZIP is required.
+
+
+Read-only Home Assistant custom integration for [Fuelio](https://www.fuel.io/). **`dev` contains an experimental candidate for `v0.1.0-beta.5`; the most recently released beta is `v0.1.0-beta.3`.** Keep Drivvo as a reference until aggregate values and update behavior are verified in real Home Assistant.
 
 ## What it does
 
@@ -14,10 +17,10 @@ Read-only Home Assistant custom integration for [Fuelio](https://www.fuel.io/). 
 
 ## Install or upgrade the integration
 
-1. In HACS, use the custom **Integration** repository `https://github.com/Jocke1970/HA-Fuelio` and choose the latest **published** prerelease. For beta.4 testing, choose `v0.1.0-beta.4` only once that release exists. Beta.1 is broken and must not be installed.
+1. In HACS, use the custom **Integration** repository `https://github.com/Jocke1970/HA-Fuelio` and choose the latest **published** prerelease. For beta.5 testing, choose `v0.1.0-beta.5` only once that release exists. Beta.1 is broken and must not be installed.
 2. Keep your ZIP in HA's **actual configuration directory**, e.g. `/config/fuelio/vehicle-1-sync.csv.zip` or `/homeassistant/fuelio/vehicle-1-sync.csv.zip` depending on deployment. Never place it in a nested `config/config` directory, post it publicly or commit it to GitHub.
 3. Restart Home Assistant after the upgrade. **Do not remove/re-add an existing Fuelio integration**: its config entry and 19 prior entity IDs must remain stable. New installs use Settings → Devices & services → Add integration → Fuelio, ZIP path `fuelio/vehicle-1-sync.csv.zip`.
-4. On beta.4, check for **28 Fuelio sensors** (19 original + 8 records + 1 monthly), no duplicated old IDs, plausible fuel prices and reported consumption, and unchanged existing totals. Optional missing extrema can legitimately be `unknown`.
+4. On beta.5, check for **28 Fuelio sensors** (19 original + 8 records + 1 monthly), no duplicated old IDs, plausible fuel prices and reported consumption, and unchanged existing totals. Optional missing extrema can legitimately be `unknown`.
 
 Manual integration alternative: copy `custom_components/fuelio/` from the chosen release into HA's existing `custom_components/fuelio/` folder, then restart. Never overwrite your Fuelio ZIP.
 
@@ -29,7 +32,7 @@ Manual integration alternative: copy `custom_components/fuelio/` from the chosen
 mkdir -p /config/www && cp /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuelio-card.js && ls -lh /config/www/ha-fuelio-card.js
 ```
 
-If `www` was newly created, restart Home Assistant so `/local` is available. In your dashboard's **Resources** settings, add a JavaScript module resource with URL `/local/ha-fuelio-card.js?v=0.1.0-beta.4` and type **JavaScript module**. Refresh the browser/dashboard after updating the file or version in the URL to avoid cached JS. **Do not add the resource twice.**
+If `www` was newly created, restart Home Assistant so `/local` is available. In your dashboard's **Resources** settings, add a JavaScript module resource with URL `/local/ha-fuelio-card.js?v=0.1.0-beta.5` and type **JavaScript module**. Refresh the browser/dashboard after updating the file or version in the URL to avoid cached JS. **Do not add the resource twice.**
 
 Paste this entire YAML as a **Manual card**, replacing `sensor.your_vehicle_monthly_cost_breakdown` with your actual sensor entity ID from Developer Tools → States:
 
@@ -39,7 +42,7 @@ entity: sensor.your_vehicle_monthly_cost_breakdown
 title: Fuelio · Bilöversikt
 ```
 
-This card determines the vehicle's other sensor IDs from the common prefix of the `monthly_cost_breakdown` entity. No registration or GPS information is embedded in the JavaScript or repository examples. You can place multiple cards with different monthly entities for separately configured vehicles. The card requires the beta.4 backend's new sensors; on older installs it displays missing values instead of inventing them.
+This card determines the vehicle's other sensor IDs from the common prefix of the `monthly_cost_breakdown` entity. No registration or GPS information is embedded in the JavaScript or repository examples. You can place multiple cards with different monthly entities for separately configured vehicles. The card requires the beta.5 backend's new sensors; on older installs it displays missing values instead of inventing them.
 
 The card displays compact overview tiles, month selector with year/month expenditure, lifetime totals, fuel summary, eight dated records, service-data limitations, and its frontend version (`0.1.0-dev.1` during this initial preview). The layout uses two columns on mobile and four where space permits. It sends **no Home Assistant service calls** and has no remote dependencies.
 

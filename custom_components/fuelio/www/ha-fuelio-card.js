@@ -1,9 +1,29 @@
-/* HA-Fuelio Card 0.1.0-dev.1 — self-contained, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.5 — self-contained, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-dev.1";
+  const CARD_VERSION = "0.1.0-beta.5";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Home Assistant derives entity IDs from display names, NOT description.key.
+// Old IDs may retain a pre-privacy vehicle prefix while new IDs use a generic one.
+const ENTITY_SLUGS = Object.freeze({
+  trip_count: "trips", trip_distance_km: "trip_distance", monthly_trip_distance_km: "trip_distance_this_month",
+  trip_duration_hours: "travel_time", estimated_trip_cost: "estimated_trip_costs_not_actual_spend",
+  fuel_count: "fuel_ups", fuel_litres: "fuel_volume", fuel_cost: "fuel_expenditure",
+  monthly_fuel_cost: "fuel_expenditure_this_month", last_fuel_price: "last_fuel_price",
+  last_reported_consumption: "last_reported_fuel_consumption", last_fillup_date: "last_fuel_up",
+  expense_count: "expense_entries", other_expenses: "other_expenditure",
+  monthly_other_expenses: "other_expenditure_this_month", upcoming_expense_count: "future_expense_entries",
+  total_actual_cost: "total_actual_expenditure", last_trip_date: "last_trip",
+  latest_odometer_km: "latest_odometer", fuel_price_min_year: "lowest_fuel_price_this_year",
+  fuel_price_max_year: "highest_fuel_price_this_year", fuel_price_min_all: "lowest_fuel_price_since_import_start",
+  fuel_price_max_all: "highest_fuel_price_since_import_start",
+  consumption_min_year: "lowest_reported_consumption_this_year",
+  consumption_max_year: "highest_reported_consumption_this_year",
+  consumption_min_all: "lowest_reported_consumption_since_import_start",
+  consumption_max_all: "highest_reported_consumption_since_import_start",
+  monthly_cost_breakdown: "monthly_cost_breakdown",
+});
   const valid = (state) => state && !["unknown", "unavailable", "none", "null", ""].includes(String(state.state).toLowerCase());
   const num = (state) => valid(state) && Number.isFinite(Number(state.state)) ? Number(state.state) : null;
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -92,7 +112,7 @@
       ];
       // React only when Fuelio values change, not on every unrelated HA state update.
       const signature = sensorKeys.map((key) => {
-        const entry = hass.states[this._prefix + key];
+        const entry = this._state(key);
         return entry ? `${entry.state}|${entry.last_updated || ""}|${key === "monthly_cost_breakdown" ? JSON.stringify(entry.attributes?.months || []) : (entry.attributes?.recorded_on || "")}` : "missing";
       }).join(";");
       if (signature === this._signature) return;
@@ -100,7 +120,31 @@
       this._render();
     }
 
-    _state(key) { return this._hass?.states?.[this._prefix + key]; }
+    _resolveId(key) {
+    const states = this._hass?.states || {};
+    const registry = this._hass?.entities || {};
+    const suffix = ENTITY_SLUGS[key] || key;
+    // The configured monthly ID may not actually exist when an upgrade gives
+    // the nine new sensors a different device-name prefix.
+    const reference = registry[this._config?.entity] || registry[this._prefix + "last_fuel_price"];
+    const device = reference?.platform === "fuelio" ? reference.device_id : null;
+    const allowed = (id) => !device || !registry[id] ||
+      (registry[id].platform === "fuelio" && registry[id].device_id === device);
+    const exactIds = [key === "monthly_cost_breakdown" ? this._config?.entity : null,
+      this._prefix + suffix, this._prefix + key];
+    for (const id of exactIds) {
+      if (id && states[id] && allowed(id)) return id;
+    }
+    // Match the *same device*, never another configured vehicle. Unique IDs
+    // survive user entity renames; generated name slugs are the fallback.
+    if (!device) return null;
+    const matches = Object.values(registry).filter((entry) => entry &&
+      entry.platform === "fuelio" && entry.device_id === device && states[entry.entity_id] &&
+      ((typeof entry.unique_id === "string" && entry.unique_id.endsWith("_" + key)) ||
+        entry.entity_id.endsWith("_" + suffix) || entry.entity_id.endsWith("_" + key)));
+    return matches.length === 1 ? matches[0].entity_id : null;
+  }
+  _state(key) { const id = this._resolveId(key); return id ? this._hass?.states?.[id] : undefined; }
     _value(key) { return num(this._state(key)); }
     _months() {
       const rows = this._state("monthly_cost_breakdown")?.attributes?.months;

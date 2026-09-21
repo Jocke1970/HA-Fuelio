@@ -18,3 +18,5 @@ jobs:
         run: node --check custom_components/fuelio/www/ha-fuelio-card.js
       - name: Frontend smoke tests
         run: node tests/test_frontend.mjs
+      - name: Real entity ID and mixed-prefix regression
+        run: node tests/test_frontend_real_ids.mjs
