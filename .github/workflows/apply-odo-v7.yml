@@ -16,11 +16,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Apply once, verify all tests, and commit only on success
+      - name: Final coverage UI fix and test
         run: |
           set -euo pipefail
-          python tools/apply_odometer_v7.py
-          python tools/finish_odometer_v7b.py
+          python tools/odometer_coverage_ui_v7.py
           python -m compileall -q custom_components tests
           python -m unittest discover -s tests -v
           node --check custom_components/fuelio/www/ha-fuelio-card.js
@@ -29,6 +28,6 @@ jobs:
           node tests/test_cost_frontend.mjs
           git config user.name 'fuelio-ci'
           git config user.email 'fuelio-ci@users.noreply.github.com'
-          git add README.md RELEASE_NOTES.md custom_components/fuelio/parser.py custom_components/fuelio/sensor.py custom_components/fuelio/www/ha-fuelio-card.js custom_components/fuelio/manifest.json tests/test_cost_analytics.py tests/test_cost_frontend.mjs
-          git commit -m 'fix(dev): odometer-based period ratios and current-month overview'
+          git add custom_components/fuelio/www/ha-fuelio-card.js tests/test_cost_frontend.mjs
+          git commit -m 'fix(dev): show partial ODO periods on ratio tiles'
           git push origin HEAD:dev
