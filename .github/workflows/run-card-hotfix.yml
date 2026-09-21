@@ -1,0 +1,31 @@
+name: Run Fuelio frontend hotfix
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/run-card-hotfix.yml']
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Extract and execute previously prepared patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/card-hotfix.yml').read_text(encoding='utf-8')
+          assert source.count('        run: |') == 1
+          script = source.split('        run: |\n', 1)[1]
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in script.split('\n'))
+          script = script.replace('rm .github/workflows/card-hotfix.yml\n', 'rm .github/workflows/card-hotfix.yml .github/workflows/run-card-hotfix.yml\n')
+          assert script.count('rm .github/workflows/card-hotfix.yml .github/workflows/run-card-hotfix.yml') == 1
+          Path('/tmp/fuelio-hotfix.sh').write_text('set -euo pipefail\n' + script, encoding='utf-8')
+          PY
+          bash /tmp/fuelio-hotfix.sh
