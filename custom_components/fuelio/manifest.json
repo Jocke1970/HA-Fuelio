@@ -1,7 +1,7 @@
 {
   "domain": "fuelio",
   "name": "Fuelio",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "codeowners": ["@Jocke1970"],
   "config_flow": true,
   "documentation": "https://github.com/Jocke1970/HA-Fuelio",
