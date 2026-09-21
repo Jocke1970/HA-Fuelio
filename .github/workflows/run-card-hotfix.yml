@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Extract and execute previously prepared patch
+      - name: Apply tested code without changing workflow files
         shell: bash
         run: |
           python - <<'PY'
@@ -24,8 +24,14 @@ jobs:
           assert source.count('        run: |') == 1
           script = source.split('        run: |\n', 1)[1]
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in script.split('\n'))
-          script = script.replace('rm .github/workflows/card-hotfix.yml\n', 'rm .github/workflows/card-hotfix.yml .github/workflows/run-card-hotfix.yml\n')
-          assert script.count('rm .github/workflows/card-hotfix.yml .github/workflows/run-card-hotfix.yml') == 1
+          marker = "python - <<'PY'\nfrom pathlib import Path\np=Path('.github/workflows/tests.yml')"
+          assert script.count(marker) == 1
+          start = script.index(marker)
+          end = script.index('\nPY\n', start) + len('\nPY\n')
+          script = script[:start] + script[end:]
+          assert script.count('rm .github/workflows/card-hotfix.yml\n') == 1
+          script = script.replace('rm .github/workflows/card-hotfix.yml\n', '')
+          assert '.github/workflows/tests.yml' not in script
           Path('/tmp/fuelio-hotfix.sh').write_text('set -euo pipefail\n' + script, encoding='utf-8')
           PY
           bash /tmp/fuelio-hotfix.sh
