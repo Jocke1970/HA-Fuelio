@@ -1,0 +1,46 @@
+name: Publish beta prerelease
+
+on:
+  push:
+    branches: [beta]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile integration and tests
+        run: python -m compileall -q custom_components tests
+      - name: Run parser regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Check beta version and release notes
+        id: version
+        shell: bash
+        run: |
+          version="$(python -c 'import json; print(json.load(open("custom_components/fuelio/manifest.json"))["version"])')"
+          if [[ "$version" == '0.1.0-beta.1' ]]; then
+            test -s RELEASE_NOTES.md
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "Not publishing: manifest version is $version"
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Publish GitHub prerelease once
+        if: steps.version.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag='v0.1.0-beta.1'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; not overwriting."
+            exit 0
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
+            --title 'HA-Fuelio v0.1.0-beta.1' --notes-file RELEASE_NOTES.md
