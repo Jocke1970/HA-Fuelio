@@ -66,6 +66,7 @@ card.hass = { states };
 assert.equal(card.shadowRoot.innerHTML, before, "Unrelated HA setter calls must not redraw the card");
 card.shadowRoot.listeners.change({ target: { id: "fuelio-month", value: "2026-08" } });
 assert.equal(card._month, "2026-08");
+assert.match(card.shadowRoot.innerHTML, /Bokförda utgifter/);
 assert.match(card.shadowRoot.innerHTML, /800,00 kr/);
 card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "records" } }) } });
 assert.equal(card._open.records, false);
