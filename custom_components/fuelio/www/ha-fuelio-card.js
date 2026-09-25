@@ -307,7 +307,7 @@ const ENTITY_SLUGS = Object.freeze({
       const syncText = dateTime(this._state("last_app_sync")?.state);
       const kpis = `<div class="kpi-strip">
         ${this._kpi("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
-        ${this._kpi("📍", "Kört denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth))}
+        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth))}
         ${this._kpi("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
         ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total))}
         ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth))}
@@ -330,7 +330,7 @@ const ENTITY_SLUGS = Object.freeze({
           ["Denna månad", kroner(nowMonth?.total)],
           ["Innevarande år", kroner(currentYearData?.total)]
         ])}
-        ${this._panel("📏", "Beräknad körkostnad", [
+        ${this._panel("📏", "Beräknad körkostnad/km", [
           ["Denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth)],
           ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)]
         ])}
