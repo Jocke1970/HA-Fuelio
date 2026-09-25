@@ -30,10 +30,10 @@ def sample_csv(*, metric: bool = True, malformed: bool = False,
         writer.writerow(header)
         writer.writerows(records)
 
-    section("Vehicle", ["Name", "DistUnit", "FuelUnit", "Tank1Capacity"], ["Test vehicle", "0" if metric else "1", "0", "60"])
-    section("Log", ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)", "VolumePrice", "l/100km (optional)", "TankNumber"],
-            ["2026-09-10 11:00", "1000", "50", "1", "1000", "20", latest_consumption, "1"],
-            ["2026-08-01 11:00", "900", "40", "1", "800", "20", earlier_consumption, "1"])
+    section("Vehicle", ["Name", "DistUnit", "FuelUnit"], ["Test vehicle", "0" if metric else "1", "0"])
+    section("Log", ["Data", "Odo (km)", "Fuel (litres)", "Price (optional)", "VolumePrice", "l/100km (optional)"],
+            ["2026-09-10 11:00", "1000", "50", "1000", "20", latest_consumption],
+            ["2026-08-01 11:00", "900", "40", "800", "20", earlier_consumption])
     section("Costs", ["Date", "Cost", "isTemplate", "isIncome"],
             ["2026-09-25 12:00", "500", "0", "0"],
             ["2026-09-15 12:00", "200", "0", "0"],
@@ -41,6 +41,30 @@ def sample_csv(*, metric: bool = True, malformed: bool = False,
             ["2026-09-12 12:00", "100", "0", "1"])
     section("TripLog", ["EndDate", "TripDist", "TripDuration", "TripCost", "StartOdo", "EndOdo"],
             ["2026-09-18 12:00", "18000" if not malformed else "NaN", "1800", "20", "1010", "1028"],
+            ["2026-08-18 12:00", "2000", "360", "5", "900", "902"])
+    return out.getvalue()
+
+
+def forecast_csv() -> str:
+    out = StringIO()
+    writer = csv.writer(out)
+
+    def section(name, header, *records):
+        writer.writerow([f"## {name}"])
+        writer.writerow(header)
+        writer.writerows(records)
+
+    section("Vehicle", ["Name", "DistUnit", "FuelUnit", "Tank1Capacity"],
+            ["Test vehicle", "0", "0", "60"])
+    section("Log",
+            ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)",
+             "VolumePrice", "l/100km (optional)", "TankNumber"],
+            ["2026-09-10 11:00", "1000", "50", "1", "1000", "20", "6", "1"],
+            ["2026-08-01 11:00", "900", "40", "1", "800", "20", "5.8", "1"])
+    section("Costs", ["Date", "Cost", "isTemplate", "isIncome"])
+    section("TripLog",
+            ["EndDate", "TripDist", "TripDuration", "TripCost", "StartOdo", "EndOdo"],
+            ["2026-09-18 12:00", "18000", "1800", "20", "1010", "1028"],
             ["2026-08-18 12:00", "2000", "360", "5", "900", "902"])
     return out.getvalue()
 
@@ -90,10 +114,7 @@ class FuelioParserTests(unittest.TestCase):
         self.assertIsNone(snapshot.last_reported_consumption)
 
     def test_range_forecast_from_latest_full_tank(self):
-        snapshot = parse_backup(
-            sample_csv(latest_consumption="6", earlier_consumption="5.8"),
-            today=date(2026, 9, 21),
-        )
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
         self.assertEqual(snapshot.distance_since_last_fillup_km, 28)
         self.assertAlmostEqual(snapshot.estimated_fuel_remaining_l, 58.35, places=2)
         self.assertAlmostEqual(snapshot.estimated_range_remaining_km, 988.9, places=1)
