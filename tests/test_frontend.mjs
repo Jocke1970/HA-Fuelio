@@ -76,6 +76,8 @@ assert.match(card.shadowRoot.innerHTML, /Tank &amp; räckvidd/);
 assert.match(card.shadowRoot.innerHTML, /700,1 km/);
 assert.match(card.shadowRoot.innerHTML, /38,93 L/);
 assert.match(card.shadowRoot.innerHTML, /2026-10-18/);
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "version" } }) } });
+assert.equal(card._open.version, true);
 assert.match(card.shadowRoot.innerHTML, /Senaste Fuelio-synk/);
 assert.equal(card._months().length, 2);
 const before = card.shadowRoot.innerHTML;
