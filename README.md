@@ -1,15 +1,15 @@
 # HA-Fuelio 🚙
 
-Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest published test release: `v0.1.0-beta.8`**. Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
+Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `v0.1.0-beta.9`**. Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
 
-## Features and data contract (beta.8)
+## Features and data contract (beta.9)
 
-- Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Automatic Google Drive retrieval is **not implemented**.
-- **36 sensors**: 19 original summaries, eight dated price/consumption extrema, one monthly cost breakdown, and eight period-analytics sensors. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
+- Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
+- **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
 - The `Monthly cost breakdown` sensor exposes bounded aggregate attributes: `months` (up to 120), `years` (up to 40), `categories_all`, `lifetime_odometer_km`, `estimated_lifetime`, `latest_two_consumption`, `latest_two_consumption_count` and coverage metadata. Period rows include booked fuel/non-fuel costs, purchased litres, observed ODO distance, logged trip km, trip count, mean logged trip length, fill-up count, categories and separately labelled booked/estimated cost metrics. All-month history may be truncated for HA attribute size; lifetime aggregates are separate.
 - Costs are categorized by `Costs.CostTypeID` joined to `CostCategories.CostTypeID`; only the category's display name and aggregate amount are exposed. Missing mappings become `Okategoriserat`, with category-list overflow grouped into `Övriga kategorier`. **`isTemplate=1` and `isIncome=1` entries are excluded**, as are future-dated expenses from actual spending. A genuinely paid item manually marked as a template is therefore *also excluded*; see [validation and open questions](BETA8_VALIDATION.md). Do not assume every recurring entry is a realized payment.
 - Eight fuel records: lowest/highest positive recorded unit prices and individually reported L/100 km, for the current calendar year and imported history, with `recorded_on` attributes. A missing report remains unknown; the latest-two-reading average is an explicitly separate estimate.
-- Standalone read-only Lovelace card at `custom_components/fuelio/www/ha-fuelio-card.js`: current-period four-panel overview, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
+- Standalone read-only Lovelace card at `custom_components/fuelio/www/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
 
 ### Distances and cost definitions
 
@@ -19,13 +19,15 @@ Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Lates
 
 **Estimated consumed-fuel driving cost:** for each observed ODO interval, derive an estimated SEK/km using the up-to-two most recent positive consumption readings and latest valid fuel unit price available at the **interval's start**, then multiply by its ODO delta. Later refuelling updates *future* intervals only. Sum interval estimates for period fuel cost; add actual booked **non-fuel** expenses for estimated total driving cost, without adding purchased fuel a second time. Divide by observed period ODO km for estimated SEK/km. Missing earlier rates or invalid coverage suppress the full-period estimate; one consumption reading is labelled limited. Fuel purchased ≠ fuel consumed, and day-only timestamps, tank mixing and unavailable per-trip actual consumption limit precision.
 
-**Historical month selector:** changes the selected month in the Costs section, including its observed ODO delta, logged trip count, and mean `TripDist` per logged trip. The four overview panels always show the **current** calendar month/year instead. Original `TripCost` estimated travel expense is a separate whole-import figure, never an actual payment or selected-month expense.
+**Historical month selector:** changes the selected month in the Costs section, including its observed ODO delta, logged trip count, and mean `TripDist` per logged trip. The current overview panels always show the **current** calendar month/year instead. Original `TripCost` estimated travel expense is a separate whole-import figure, never an actual payment or selected-month expense.
+
+**Tank/range forecast:** the latest primary-tank full fill-up is the calibration point. Later partial fills add recorded litres; estimated driving consumption uses the latest up-to-two positive reported L/100 km values. Remaining litres are bounded to tank capacity, remaining range is theoretical, and next-fuel-up date/days use up to 30 calendar days of logged driving pace. The sync timestamp is the local ZIP mtime; in the tested rclone workflow it matches Drive's preserved modification time.
 
 For detailed fields see [analytics schema](docs/analytics-schema.md), [ODO algorithm](ODOMETER_ALGORITHM.md) and [beta.8 test status](BETA8_VALIDATION.md).
 
 ## Install or upgrade
 
-1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest *published* prerelease. Avoid the broken beta.1 tag. Update beta.8 through HACS and restart Home Assistant.
+1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest *published* prerelease. Avoid the broken beta.1 tag. Update beta.9 through HACS and restart Home Assistant.
 2. Keep your private ZIP at `fuelio/vehicle-1-sync.csv.zip` relative to the actual HA configuration root. Examples: `/config/fuelio/vehicle-1-sync.csv.zip` or `/homeassistant/fuelio/vehicle-1-sync.csv.zip`; **not** a nested `config/config` directory. Do not put the ZIP in GitHub or paste its private records into logs/issues.
 3. **Do not remove/re-add the config entry or rename existing entities.** The old and new entity-ID prefixes can coexist; the card maps sensors through the HA entity/device registry.
 4. Reinstall the frontend file after each integration upgrade:
@@ -36,7 +38,7 @@ cp -f /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuel
 ls -lh /config/www/ha-fuelio-card.js
 ```
 
-5. Under dashboard **Resources**, update the **existing single** JavaScript-module entry to `/local/ha-fuelio-card.js?v=0.1.0-beta.8` (do not add a duplicate), then hard-refresh the browser. If `/config/www` was just created, restart HA to expose `/local`.
+5. Under dashboard **Resources**, update the **existing single** JavaScript-module entry to `/local/ha-fuelio-card.js?v=0.1.0-beta.9` (do not add a duplicate), then hard-refresh the browser. If `/config/www` was just created, restart HA to expose `/local`.
 6. Manual Lovelace card YAML for the existing tested installation:
 
 ```yaml
@@ -49,9 +51,9 @@ Use your **actual** monthly-breakdown entity ID on other installations; do not a
 
 ## Privacy and limitations
 
-Backups may contain registration, VIN, GPS tracks and private notes. No raw backup, identifiable fixtures, coordinates, trip records, notes or secrets should enter this public repository. HA-Fuelio exposes only aggregates, but user-supplied cost *category names* are visible in local HA attributes. Previously registered entity IDs may still embed user-chosen identifying text; beta.8 does not rename them automatically. Backup imports do not backfill HA Recorder.
+Backups may contain registration, VIN, GPS tracks and private notes. No raw backup, identifiable fixtures, coordinates, trip records, notes or secrets should enter this public repository. HA-Fuelio exposes only aggregates, but user-supplied cost *category names* are visible in local HA attributes. Previously registered entity IDs may still embed user-chosen identifying text; beta.9 does not rename them automatically. Backup imports do not backfill HA Recorder.
 
-Not implemented: automatic Google Drive/Dropbox sync, service schedules/reminders, fuel level/range, actual per-trip consumption, multiple vehicles in one ZIP, nonmetric exports or stable release. Currency is labelled SEK for the configured profile, not independently verified from the export. Future expenses and refuellings are not booked as current spending.
+Not implemented: built-in Google Drive/Dropbox transport, service schedules/reminders, actual per-trip consumption, multiple vehicles in one ZIP, nonmetric exports or stable release. Currency is labelled SEK for the configured profile, not independently verified from the export. Future expenses and refuellings are not booked as current spending.
 
 ## Test and release status — 2026-09-22
 
@@ -68,4 +70,4 @@ node tests/test_cost_frontend.mjs
 node tests/test_estimate_frontend.mjs
 ```
 
-**Release gate:** documentation-only changes go to `dev` first. Do not call beta.8 stable or promote to `main` based solely on automated tests or current UI screenshots.
+**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Do not call beta.9 stable or promote to `main` based solely on automated tests.
