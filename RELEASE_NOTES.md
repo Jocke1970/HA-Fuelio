@@ -1,3 +1,17 @@
+# HA-Fuelio v0.1.0-beta.10 🚙
+
+Desktop-first UI refresh built on the validated beta.9 backend.
+
+- Redesign the Lovelace card for a dedicated wide dashboard: six top KPIs, denser desktop grids, stronger visual hierarchy, a wider costs/fuel composition and compact secondary sections.
+- Promote **Tank & räckvidd** to a spotlight panel with estimated fuel remaining, theoretical range, distance since latest fill-up, predicted next fill-up and a visual estimated tank-level bar.
+- Show **ZIP uppdaterad** prominently in the header. The timestamp comes from the existing `last_app_sync` sensor, i.e. the local ZIP modification time preserved from Drive by the tested rclone workflow.
+- Keep the same 42 backend sensors and beta.9 calculation model; this release is primarily frontend presentation plus a redraw fix.
+- Add the six beta.9 range/sync sensors to the card's change signature so a new ZIP timestamp/range value redraws the card even when unrelated Fuelio values do not change.
+- Collapse the records section by default to reduce vertical scrolling on desktop; detailed cost/fuel sections remain open.
+- The complete beta.9 card remains preserved by the immutable release/tag `v0.1.0-beta.9`, so no loose backup JS file is added to the repository.
+
+Upgrade through HACS, restart Home Assistant, re-copy `/config/custom_components/fuelio/www/ha-fuelio-card.js` to `/config/www/ha-fuelio-card.js`, update the existing resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.10`, and hard-refresh. A separate compact/mobile card can be designed later.
+
 # HA-Fuelio v0.1.0-beta.9 🚙
 
 Fuel-tank range forecasting and Fuelio source-sync visibility.

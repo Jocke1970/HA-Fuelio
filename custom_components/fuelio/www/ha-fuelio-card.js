@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.9 — self-contained, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.10 — desktop-first premium, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.9";
+  const CARD_VERSION = "0.1.0-beta.10";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -54,50 +54,98 @@ const ENTITY_SLUGS = Object.freeze({
     ? new Intl.DateTimeFormat("sv-SE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
     : "Okänd månad";
   const style = `
-    :host { display:block; container-type:inline-size; color:var(--primary-text-color, #202124); font:inherit; }
+    :host { display:block; container-type:inline-size; color:var(--primary-text-color,#202124); font:inherit; }
     * { box-sizing:border-box; }
-    .shell { overflow:hidden; border-radius:22px; padding:16px; background:var(--ha-card-background, var(--card-background-color,#fff)); box-shadow:var(--ha-card-box-shadow,0 1px 4px #00000019); }
-    .header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
-    h2 { font-size:1.2rem; margin:0; font-weight:750; } h3 { font-size:1rem; margin:0; }
-    .muted { color:var(--secondary-text-color,#68727d); font-size:.79rem; }
-    .pill { padding:5px 9px; border-radius:99px; background:var(--secondary-background-color,#eef1f4); font-size:.73rem; }
-    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .shell { overflow:hidden; border-radius:26px; padding:18px; background:var(--ha-card-background,var(--card-background-color,#fff)); box-shadow:var(--ha-card-box-shadow,0 8px 28px #00000012); }
+    .header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+    .title-wrap { display:flex; flex-direction:column; gap:5px; }
+    h2 { font-size:1.3rem; margin:0; font-weight:800; letter-spacing:-.02em; }
+    h3 { font-size:1rem; margin:0; }
+    .header-meta { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; }
+    .muted { color:var(--secondary-text-color,#68727d); font-size:.78rem; }
+    .pill { padding:6px 10px; border-radius:999px; background:var(--secondary-background-color,#eef1f4); font-size:.72rem; white-space:nowrap; }
+    .pill strong { font-weight:800; }
+    .kpi-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+    .kpi { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:13px 14px; background:linear-gradient(180deg,color-mix(in srgb,var(--card-background-color,#fff) 96%,var(--primary-color,#03a9f4) 4%),var(--card-background-color,#fff)); }
+    .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
+    .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; }
     .overview { display:grid; grid-template-columns:1fr; gap:12px; }
-    .overview-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:15px; min-width:0; }
-    .overview-panel h3 { font-size:1rem; margin:0 0 10px; }
+    .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
+    .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
     .overview-row { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 10px; padding:8px 0; border-top:1px solid var(--divider-color,#e2e4e8); }
     .overview-row:first-of-type { border-top:0; }
-    .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.78rem; }
-    .overview-row strong { text-align:right; font-size:.98rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
-    .overview-row .note { width:100%; text-align:right; font-size:.7rem; color:var(--secondary-text-color,#68727d); }
-    @container (min-width:540px) { .overview { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-    .tile { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:17px; padding:14px 9px; text-align:center; }
-    .tile .ico { font-size:1.2rem; display:block; margin-bottom:7px; }
-    .tile .label { font-size:.78rem; font-weight:700; margin-bottom:7px; }
-    .tile .value { font-weight:780; font-size:1.05rem; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-    .tile .detail { font-size:.71rem; color:var(--secondary-text-color,#68727d); margin-top:5px; }
-    .section { margin-top:12px; border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; overflow:hidden; }
-    .section>button { cursor:pointer; display:flex; align-items:center; justify-content:space-between; width:100%; background:none; border:none; color:inherit; padding:14px; text-align:left; font:inherit; font-weight:750; }
+    .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.75rem; }
+    .overview-row strong { text-align:right; font-size:.95rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .overview-row .note { width:100%; text-align:right; font-size:.68rem; color:var(--secondary-text-color,#68727d); }
+    .range-panel { display:grid; gap:12px; }
+    .range-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .range-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .range-stat { min-width:0; padding:11px 12px; border-radius:15px; background:var(--secondary-background-color,#f4f5f7); }
+    .range-stat span { display:block; color:var(--secondary-text-color,#68727d); font-size:.69rem; margin-bottom:4px; }
+    .range-stat strong { display:block; font-size:1.08rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .fuel-meter { height:10px; border-radius:999px; background:var(--secondary-background-color,#e8ebef); overflow:hidden; }
+    .fuel-meter>span { display:block; height:100%; border-radius:999px; background:var(--primary-color,#03a9f4); }
+    .fuel-meter-note { display:flex; justify-content:space-between; gap:10px; margin-top:6px; color:var(--secondary-text-color,#68727d); font-size:.68rem; }
+    .tripbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 14px; margin-top:12px; padding:10px 12px; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; font-size:.78rem; }
+    .dashboard-grid { display:grid; grid-template-columns:1fr; gap:12px; margin-top:12px; }
+    .section { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
+    .section>button { cursor:pointer; display:flex; align-items:center; justify-content:space-between; width:100%; background:none; border:none; color:inherit; padding:14px 16px; text-align:left; font:inherit; font-weight:800; }
     .section>button:focus-visible,select:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
-    .body { padding:0 12px 13px; } .section-title { font-weight:750; margin:14px 2px 9px; font-size:.9rem; }
-    .select-label { display:block; margin:12px 2px 6px; font-size:.78rem; color:var(--secondary-text-color,#68727d); }
-    select { width:100%; color:inherit; background:var(--ha-card-background,var(--card-background-color,#fff)); border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:11px 10px; font:inherit; }
-    .summary { border:1px solid var(--divider-color,#e2e4e8); border-radius:15px; padding:11px; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; font-size:.8rem; }
+    .body { padding:0 14px 14px; }
+    .section-title { font-weight:800; margin:14px 2px 9px; font-size:.86rem; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .tile { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; padding:12px 8px; text-align:center; }
+    .tile .ico { font-size:1.05rem; display:block; margin-bottom:5px; }
+    .tile .label { font-size:.71rem; font-weight:750; margin-bottom:5px; }
+    .tile .value { font-weight:850; font-size:1rem; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .tile .detail { font-size:.66rem; color:var(--secondary-text-color,#68727d); margin-top:4px; }
+    .select-label { display:block; margin:12px 2px 6px; font-size:.75rem; color:var(--secondary-text-color,#68727d); }
+    select { width:100%; color:inherit; background:var(--ha-card-background,var(--card-background-color,#fff)); border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:10px; font:inherit; }
+    .summary { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:10px 11px; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:9px; font-size:.77rem; }
     .summary strong { font-variant-numeric:tabular-nums; text-align:right; }
-    .notice { padding:12px; margin-top:10px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); border-radius:13px; font-size:.8rem; line-height:1.45; }
-    .small { font-size:.75rem; } .foot { text-align:right; margin-top:12px; }
-    .category-list { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:4px 12px; }
-    .category-row { display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--divider-color,#e2e4e8); font-size:.84rem; }
-    .category-row:last-child { border:0; } .category-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
-    @media (min-width:850px) { .shell { padding:20px; } .grid { grid-template-columns:repeat(4,minmax(0,1fr)); } .records { grid-template-columns:repeat(4,minmax(0,1fr)); } }
-    @media (max-width:340px) { .tile { padding:11px 5px; } .tile .value { font-size:.92rem; } }
+    .notice { padding:10px 11px; margin-top:9px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); border-radius:12px; font-size:.74rem; line-height:1.4; }
+    .small { font-size:.72rem; }
+    .foot { text-align:right; margin-top:12px; }
+    .category-list { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:3px 11px; }
+    .category-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--divider-color,#e2e4e8); font-size:.79rem; }
+    .category-row:last-child { border:0; }
+    .category-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .records-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    @container (min-width:720px) {
+      .shell { padding:22px; }
+      .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .range-panel { grid-column:1 / -1; }
+      .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .records-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    }
+    @container (min-width:1050px) {
+      .shell { padding:24px; }
+      .kpi-strip { grid-template-columns:repeat(6,minmax(0,1fr)); }
+      .overview { grid-template-columns:repeat(4,minmax(0,1fr)); }
+      .range-panel { grid-column:span 2; }
+      .dashboard-grid { grid-template-columns:minmax(0,1.6fr) minmax(340px,.9fr); align-items:start; }
+      .section-costs { grid-row:span 2; }
+      .section-records,.section-service,.section-version { grid-column:1 / -1; }
+      .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .section-costs .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    }
+    @container (min-width:1380px) {
+      .overview { grid-template-columns:repeat(6,minmax(0,1fr)); }
+      .overview-panel { grid-column:span 1; }
+      .range-panel { grid-column:span 2; }
+      .dashboard-grid { grid-template-columns:minmax(0,1.75fr) minmax(400px,.85fr); }
+      .section-records .body { display:grid; grid-template-columns:1fr 1fr; gap:0 18px; }
+      .section-records .notice { grid-column:1 / -1; }
+    }
+    @media (max-width:340px) { .tile { padding:10px 5px; } .tile .value { font-size:.9rem; } }
   `;
-
   class HaFuelioCard extends HTMLElement {
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      this._open = { costs: true, fuel: true, records: true, service: false, version: false };
+      this._open = { costs: true, fuel: true, records: false, service: false, version: false };
       this._month = null;
       this._signature = null;
       this.shadowRoot.addEventListener("click", (event) => {
@@ -143,6 +191,8 @@ const ENTITY_SLUGS = Object.freeze({
         "fuel_cost_per_km_year", "total_cost_per_km_year", "fuel_cost_per_km_all", "total_cost_per_km_all",
         "fuel_price_min_year", "fuel_price_max_year", "fuel_price_min_all", "fuel_price_max_all",
         "consumption_min_year", "consumption_max_year", "consumption_min_all", "consumption_max_all",
+        "distance_since_last_fillup_km", "estimated_fuel_remaining_l", "estimated_range_remaining_km",
+        "estimated_days_to_next_fillup", "estimated_next_fillup_date", "last_app_sync",
       ];
       // React only when Fuelio values change, not on every unrelated HA state update.
       const signature = sensorKeys.map((key) => {
@@ -193,9 +243,31 @@ const ENTITY_SLUGS = Object.freeze({
       return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
     }
+    _kpi(icon, label, value, detail = "") {
+      return `<div class="kpi"><div class="label">${icon} ${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}</div>`;
+    }
+    _rangePanel(forecast) {
+      const remaining = this._value("estimated_fuel_remaining_l");
+      const capacity = Number(forecast?.tank_capacity_l);
+      const percent = Number.isFinite(remaining) && Number.isFinite(capacity) && capacity > 0
+        ? Math.max(0, Math.min(100, remaining / capacity * 100)) : null;
+      return `<section class="range-panel">
+        <div class="range-head"><h3>🧭 Tank & räckvidd</h3><span class="pill">${forecast?.confidence === "normal" ? "Kalibrerad" : forecast?.confidence === "limited" ? "Begränsat underlag" : "Estimat"}</span></div>
+        <div class="range-main">
+          <div class="range-stat"><span>Bränsle kvar</span><strong>${esc(decimal(remaining, "L"))}</strong></div>
+          <div class="range-stat"><span>Teoretisk räckvidd</span><strong>${esc(decimal(this._value("estimated_range_remaining_km"), "km"))}</strong></div>
+          <div class="range-stat"><span>Sedan senaste tankning</span><strong>${esc(decimal(this._value("distance_since_last_fillup_km"), "km"))}</strong></div>
+          <div class="range-stat"><span>Nästa tankning</span><strong>${esc(date(this._state("estimated_next_fillup_date")?.state))}</strong></div>
+        </div>
+        <div>
+          <div class="fuel-meter"><span style="width:${Number.isFinite(percent) ? percent.toFixed(1) : 0}%"></span></div>
+          <div class="fuel-meter-note"><span>${Number.isFinite(percent) ? `Ca ${fmt.format(percent)} % kvar` : "Tanknivå saknas"}</span><span>${Number.isFinite(this._value("estimated_days_to_next_fillup")) ? `${decimal(this._value("estimated_days_to_next_fillup"), "dagar")} kvar` : "Körtempo saknas"}</span></div>
+        </div>
+      </section>`;
+    }
     _section(id, icon, title, inner) {
       const open = this._open[id];
-      return `<section class="section"><button type="button" data-section="${id}" aria-expanded="${open}" aria-controls="panel-${id}"><span>${icon} ${esc(title)}</span><span aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div id="panel-${id}" class="body">${inner}</div>` : ""}</section>`;
+      return `<section class="section section-${id}"><button type="button" data-section="${id}" aria-expanded="${open}" aria-controls="panel-${id}"><span>${icon} ${esc(title)}</span><span aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div id="panel-${id}" class="body">${inner}</div>` : ""}</section>`;
     }
     _recordTile(key, title, unit) {
       const entry = this._state(key);
@@ -232,18 +304,27 @@ const ENTITY_SLUGS = Object.freeze({
       const coverageText = (row) => row?.estimate_coverage === "missing_rate" ? "Pris-/förbrukningsunderlag saknas" :
         row?.estimate_coverage?.includes?.("one_consumption_value") ? "En förbrukningsavläsning – begränsat underlag" :
         row?.odo_coverage === "partial_start" ? "Delperiod från första mätningen" : "Uppskattning";
+      const syncText = dateTime(this._state("last_app_sync")?.state);
+      const kpis = `<div class="kpi-strip">
+        ${this._kpi("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
+        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth))}
+        ${this._kpi("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
+        ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total))}
+        ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth))}
+        ${this._kpi("🧭", "Räckvidd kvar", decimal(this._value("estimated_range_remaining_km"), "km"))}
+      </div>`;
       const overview = `<div class="overview">
         ${this._panel("🛣️", "Mätarställning", [
           ["Aktuell", decimal(this._value("latest_odometer_km"), "km")],
-          ["Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth)],
-          ["Körsträcka i år", decimal(currentYearData?.km, "km"), currentYearData?.odo_coverage === "partial_start" ? "Delperiod" : ""],
+          ["Denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth)],
+          ["I år", decimal(currentYearData?.km, "km"), currentYearData?.odo_coverage === "partial_start" ? "Delperiod" : ""],
           ["Sedan importstart", decimal(aggregate.lifetime_odometer_km, "km")]
         ])}
         ${this._panel("⛽", "Drivmedel", [
-          ["Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km")],
+          ["Senaste", decimal(this._value("last_reported_consumption"), "L/100 km")],
+          ["Löpande snitt", decimal(aggregate.latest_two_consumption, "L/100 km"), `${aggregate.latest_two_consumption_count || 0} giltiga tankningar`],
           ["Tankat denna månad", decimal(nowMonth?.litres, "L")],
-          ["Tankat i år", decimal(currentYearData?.litres, "L")],
-          ["Löpande snitt", decimal(aggregate.latest_two_consumption, "L/100 km"), `${aggregate.latest_two_consumption_count || 0} giltiga tankningar`]
+          ["Tankat i år", decimal(currentYearData?.litres, "L")]
         ])}
         ${this._panel("💳", "Bokförda utgifter", [
           ["Denna månad", kroner(nowMonth?.total)],
@@ -253,15 +334,7 @@ const ENTITY_SLUGS = Object.freeze({
           ["Denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth)],
           ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)]
         ])}
-        ${this._panel("🧭", "Tank & räckvidd", [
-          ["Sedan senaste tankning", decimal(this._value("distance_since_last_fillup_km"), "km")],
-          ["Bränsle kvar", decimal(this._value("estimated_fuel_remaining_l"), "L"),
-            forecast.confidence === "normal" ? "Kalibrerad från senaste fulltank" : forecast.confidence === "limited" ? "Begränsat underlag" : ""],
-          ["Teoretisk räckvidd", decimal(this._value("estimated_range_remaining_km"), "km"),
-            forecast.consumption_basis_l_per_100km ? `Förbrukning ${decimal(Number(forecast.consumption_basis_l_per_100km), "L/100 km")}` : ""],
-          ["Nästa tankning", date(this._state("estimated_next_fillup_date")?.state),
-            Number.isFinite(this._value("estimated_days_to_next_fillup")) ? `${decimal(this._value("estimated_days_to_next_fillup"), "dagar")} kvar · 30-dagars körtempo` : "Körtempo saknas"]
-        ])}
+        ${this._rangePanel(forecast)}
       </div>`;
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total))}
@@ -313,29 +386,40 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("🗓️", `År ${currentYear}`, decimal(selectedYear?.fuel_ups, "st"))}
         ${this._tile("⛽", "Sedan importstart", decimal(this._value("fuel_count"), "st"))}
       </div>`;
-      const records = `<div class="section-title">Literpris · kalenderåret</div><div class="grid records">
+      const records = `<div class="section-title">Literpris · kalenderåret</div><div class="records-grid">
         ${this._recordTile("fuel_price_min_year", "Lägsta i år", "kr/L")}
         ${this._recordTile("fuel_price_max_year", "Högsta i år", "kr/L")}
-      </div><div class="section-title">Literpris · sedan importstart</div><div class="grid records">
+      </div><div class="section-title">Literpris · sedan importstart</div><div class="records-grid">
         ${this._recordTile("fuel_price_min_all", "Lägsta totalt", "kr/L")}
         ${this._recordTile("fuel_price_max_all", "Högsta totalt", "kr/L")}
-      </div><div class="section-title">Rapporterad förbrukning · kalenderåret</div><div class="grid records">
+      </div><div class="section-title">Rapporterad förbrukning · kalenderåret</div><div class="records-grid">
         ${this._recordTile("consumption_min_year", "Lägsta i år", "L/100 km")}
         ${this._recordTile("consumption_max_year", "Högsta i år", "L/100 km")}
-      </div><div class="section-title">Rapporterad förbrukning · sedan importstart</div><div class="grid records">
+      </div><div class="section-title">Rapporterad förbrukning · sedan importstart</div><div class="records-grid">
         ${this._recordTile("consumption_min_all", "Lägsta totalt", "L/100 km")}
         ${this._recordTile("consumption_max_all", "Högsta totalt", "L/100 km")}
       </div><div class="notice">Rekorden bygger på registrerade tankningar med giltiga positiva värden. Datumet visas under varje rekord. Saknade värden visas som —. Ett rekord per tankning är inte samma sak som ett vägt livstidssnitt.</div>`;
       const service = `<div class="notice">Serviceintervall och betalningspåminnelser finns ännu inte i HA-Fuelios datamodell. Tank- och räckviddsprognosen visas i översikten och under Bränsle.</div>`;
-      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste Fuelio-synk</span><strong>${esc(dateTime(this._state("last_app_sync")?.state))}</strong></div><div class="summary"><span>Resurs</span><strong>/local/ha-fuelio-card.js</strong></div><div class="notice">Senaste Fuelio-synk bygger på ZIP-filens modifieringstid, som rclone bevarar från Drive. Den lokala ZIP-filen läses ungefär var femte minut. Kortet läser endast HA-entiteter och gör inga serviceanrop.</div>`;
-      this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell"><div class="header"><h2>🚙 ${esc(title)}</h2><span class="pill">${isAvailable ? "✅ Data tillgänglig" : "⚠️ Data saknas"}</span></div>
+      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste ZIP-uppdatering</span><strong>${esc(syncText)}</strong></div><div class="summary"><span>Resurs</span><strong>/local/ha-fuelio-card.js</strong></div><div class="notice">ZIP-tiden är filens modifieringstid. I din rclone-kedja bevaras Drive-filens tid när ZIP:en kopieras till Home Assistant.</div>`;
+      this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">
+        <div class="header">
+          <div class="title-wrap"><h2>🚙 ${esc(title)}</h2><span class="muted">Desktop dashboard · Fuelio read-only</span></div>
+          <div class="header-meta">
+            <span class="pill">${isAvailable ? "✅ Data tillgänglig" : "⚠️ Data saknas"}</span>
+            <span class="pill">🗜️ ZIP uppdaterad <strong>${esc(syncText)}</strong></span>
+            <span class="pill">🚗 Senaste resa <strong>${esc(date(this._state("last_trip_date")?.state))}</strong></span>
+          </div>
+        </div>
+        ${kpis}
         ${overview}
-        <div class="summary"><span>🛣️ ${esc(decimal(this._value("trip_count"), "resor"))} · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Senaste resa ${esc(date(this._state("last_trip_date")?.state))}</span></div>
-        ${this._section("costs", "💳", "Kostnader", costs)}
-        ${this._section("fuel", "⛽", "Bränsle", fuel)}
-        ${this._section("records", "🏆", "Pris- & förbrukningsrekord", records)}
-        ${this._section("service", "🔧", "Service & underhåll", service)}
-        ${this._section("version", "ℹ️", "Versionsinformation", version)}
+        <div class="tripbar"><span>🛣️ <strong>${esc(decimal(this._value("trip_count"), "resor"))}</strong> · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Löpande Fuelio-statistik sedan importstart</span></div>
+        <div class="dashboard-grid">
+          ${this._section("costs", "💳", "Kostnader", costs)}
+          ${this._section("fuel", "⛽", "Bränsle", fuel)}
+          ${this._section("records", "🏆", "Pris- & förbrukningsrekord", records)}
+          ${this._section("service", "🔧", "Service & underhåll", service)}
+          ${this._section("version", "ℹ️", "Versionsinformation", version)}
+        </div>
         <div class="foot muted">Fuelio · read-only · ${CARD_VERSION}</div>
       </div></ha-card>`;
     }
