@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.8 — self-contained, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.9 — self-contained, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.8";
+  const CARD_VERSION = "0.1.0-beta.9";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -15,7 +15,14 @@ const ENTITY_SLUGS = Object.freeze({
   expense_count: "expense_entries", other_expenses: "other_expenditure",
   monthly_other_expenses: "other_expenditure_this_month", upcoming_expense_count: "future_expense_entries",
   total_actual_cost: "total_actual_expenditure", last_trip_date: "last_trip",
-  latest_odometer_km: "latest_odometer", fuel_price_min_year: "lowest_fuel_price_this_year",
+  latest_odometer_km: "latest_odometer",
+  distance_since_last_fillup_km: "distance_since_last_fuel_up",
+  estimated_fuel_remaining_l: "estimated_fuel_remaining",
+  estimated_range_remaining_km: "estimated_range_remaining",
+  estimated_days_to_next_fillup: "estimated_days_to_next_fuel_up",
+  estimated_next_fillup_date: "estimated_next_fuel_up",
+  last_app_sync: "last_fuelio_app_sync",
+  fuel_price_min_year: "lowest_fuel_price_this_year",
   fuel_price_max_year: "highest_fuel_price_this_year", fuel_price_min_all: "lowest_fuel_price_since_import_start",
   fuel_price_max_all: "highest_fuel_price_since_import_start",
   consumption_min_year: "lowest_reported_consumption_this_year",
@@ -37,6 +44,12 @@ const ENTITY_SLUGS = Object.freeze({
   const kroner = (value) => Number.isFinite(value) ? `${money.format(value)} kr` : "—";
   const decimal = (value, unit = "") => Number.isFinite(value) ? `${fmt.format(value)}${unit ? ` ${unit}` : ""}` : "—";
   const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
+  const dateTime = (value) => {
+    const parsed = new Date(String(value || ""));
+    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat("sv-SE", {
+      dateStyle: "short", timeStyle: "short"
+    }).format(parsed);
+  };
   const monthName = (key) => /^\d{4}-(0[1-9]|1[0-2])$/.test(key)
     ? new Intl.DateTimeFormat("sv-SE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
     : "Okänd månad";
@@ -215,6 +228,7 @@ const ENTITY_SLUGS = Object.freeze({
       const currentYearData = allYears.find((item) => String(item.year) === String(nowMonth?.month?.slice(0, 4)));
       const aggregate = this._state("monthly_cost_breakdown")?.attributes || {};
       const lifetime = aggregate.estimated_lifetime || {};
+      const forecast = this._state("estimated_range_remaining_km")?.attributes || {};
       const coverageText = (row) => row?.estimate_coverage === "missing_rate" ? "Pris-/förbrukningsunderlag saknas" :
         row?.estimate_coverage?.includes?.("one_consumption_value") ? "En förbrukningsavläsning – begränsat underlag" :
         row?.odo_coverage === "partial_start" ? "Delperiod från första mätningen" : "Uppskattning";
@@ -238,6 +252,15 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._panel("📏", "Beräknad körkostnad/km", [
           ["Denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth)],
           ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)]
+        ])}
+        ${this._panel("🧭", "Tank & räckvidd", [
+          ["Sedan senaste tankning", decimal(this._value("distance_since_last_fillup_km"), "km")],
+          ["Bränsle kvar", decimal(this._value("estimated_fuel_remaining_l"), "L"),
+            forecast.confidence === "normal" ? "Kalibrerad från senaste fulltank" : forecast.confidence === "limited" ? "Begränsat underlag" : ""],
+          ["Teoretisk räckvidd", decimal(this._value("estimated_range_remaining_km"), "km"),
+            forecast.consumption_basis_l_per_100km ? `Förbrukning ${decimal(Number(forecast.consumption_basis_l_per_100km), "L/100 km")}` : ""],
+          ["Nästa tankning", date(this._state("estimated_next_fillup_date")?.state),
+            Number.isFinite(this._value("estimated_days_to_next_fillup")) ? `${decimal(this._value("estimated_days_to_next_fillup"), "dagar")} kvar · 30-dagars körtempo` : "Körtempo saknas"]
         ])}
       </div>`;
       const costs = `<div class="grid">
@@ -285,7 +308,7 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("💰", "Senaste literpris", decimal(this._value("last_fuel_price"), "kr/L"))}
         ${this._tile("🛢️", "Tankad volym", decimal(this._value("fuel_litres"), "L"), "Sedan importstart")}
         ${this._tile("📆", "Senaste tankning", date(this._state("last_fillup_date")?.state))}
-      </div><div class="section-title">Antal tankningar</div><div class="grid">
+      </div><div class="notice">Räckvidden räknas från senaste fulltankning som kalibreringspunkt. Senare deltankningar adderas och beräknad förbrukning dras av. Nästa tankdatum använder de senaste 30 dagarnas loggade körtempo och avser teoretiskt tom tank.</div><div class="section-title">Antal tankningar</div><div class="grid">
         ${this._tile("📅", "Vald månad", decimal(selected?.fuel_ups, "st"))}
         ${this._tile("🗓️", `År ${currentYear}`, decimal(selectedYear?.fuel_ups, "st"))}
         ${this._tile("⛽", "Sedan importstart", decimal(this._value("fuel_count"), "st"))}
@@ -303,8 +326,8 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._recordTile("consumption_min_all", "Lägsta totalt", "L/100 km")}
         ${this._recordTile("consumption_max_all", "Högsta totalt", "L/100 km")}
       </div><div class="notice">Rekorden bygger på registrerade tankningar med giltiga positiva värden. Datumet visas under varje rekord. Saknade värden visas som —. Ett rekord per tankning är inte samma sak som ett vägt livstidssnitt.</div>`;
-      const service = `<div class="notice">Serviceintervall, betalningspåminnelser, tanknivå och räckvidd finns ännu inte i HA-Fuelios datamodell. Inga Drivvo-värden används eller gissas här.</div>`;
-      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Resurs</span><strong>/local/ha-fuelio-card.js</strong></div><div class="notice">Lokal Fuelio ZIP · läses ungefär var femte minut. Kortet läser endast HA-entiteter och gör inga serviceanrop.</div>`;
+      const service = `<div class="notice">Serviceintervall och betalningspåminnelser finns ännu inte i HA-Fuelios datamodell. Tank- och räckviddsprognosen visas i översikten och under Bränsle.</div>`;
+      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste Fuelio-synk</span><strong>${esc(dateTime(this._state("last_app_sync")?.state))}</strong></div><div class="summary"><span>Resurs</span><strong>/local/ha-fuelio-card.js</strong></div><div class="notice">Senaste Fuelio-synk bygger på ZIP-filens modifieringstid, som rclone bevarar från Drive. Den lokala ZIP-filen läses ungefär var femte minut. Kortet läser endast HA-entiteter och gör inga serviceanrop.</div>`;
       this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell"><div class="header"><h2>🚙 ${esc(title)}</h2><span class="pill">${isAvailable ? "✅ Data tillgänglig" : "⚠️ Data saknas"}</span></div>
         ${overview}
         <div class="summary"><span>🛣️ ${esc(decimal(this._value("trip_count"), "resor"))} · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Senaste resa ${esc(date(this._state("last_trip_date")?.state))}</span></div>
