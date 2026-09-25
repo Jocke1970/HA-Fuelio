@@ -70,7 +70,7 @@ assert.match(card.shadowRoot.innerHTML, /&lt;script&gt;invalid&lt;\/script&gt;/)
 assert.doesNotMatch(card.shadowRoot.innerHTML, /<script>invalid<\/script>/);
 assert.match(card.shadowRoot.innerHTML, /1\s?200,00 kr/);
 assert.match(card.shadowRoot.innerHTML, /Pris- &amp; förbrukningsrekord/);
-assert.match(card.shadowRoot.innerHTML, /Tank &amp; räckvidd/);
+assert.match(card.shadowRoot.innerHTML, /Tank & räckvidd/);
 assert.match(card.shadowRoot.innerHTML, /700,1 km/);
 assert.match(card.shadowRoot.innerHTML, /38,93 L/);
 assert.match(card.shadowRoot.innerHTML, /2026-10-18/);
