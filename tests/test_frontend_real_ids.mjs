@@ -49,6 +49,8 @@ add(generic + 'lowest_reported_consumption_this_year', 'consumption_min_year', 5
 // A different vehicle MUST NOT fill in our missing highest year reading.
 add('sensor.other_car_highest_fuel_price_this_year', 'fuel_price_max_year', 99.99, { recorded_on: '2026-01-01' }, 'carB');
 card.hass = { states, entities };
+card._open.records = true;
+card._render();
 let html = card.shadowRoot.innerHTML;
 assert.match(html, /Data tillgänglig/);
 assert.match(html, /178\s?593 km/);
