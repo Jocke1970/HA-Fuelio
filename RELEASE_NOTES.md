@@ -1,3 +1,17 @@
+# HA-Fuelio v0.1.0-beta.9 🚙
+
+Fuel-tank range forecasting and Fuelio source-sync visibility.
+
+- Add **six read-only sensors** (42 total): distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days to next fuel-up, estimated next fuel-up date, and last Fuelio app sync.
+- Range estimation uses the primary tank's exported capacity and the latest full fill-up as a calibration point. Later partial fill-ups add their actual litres; estimated consumption since calibration is subtracted using the rolling mean of up to the latest two valid reported L/100 km values. Remaining fuel is physically bounded to 0..tank capacity. A partial fill therefore does not make the estimate unavailable.
+- The next-fuel-up prediction divides theoretical remaining range by aggregate logged driving pace over up to the latest 30 calendar days. The predicted date represents **theoretical empty tank**, not a claim about when the driver will choose to refuel. Forecast attributes expose consumption basis/sample count, calibration date, partial-fill count, 30-day daily-distance basis and a normal/limited confidence label.
+- The new source-sync sensor uses the local ZIP file modification time. In the tested rclone Google Drive workflow, rclone preserves Drive's modification time, so this surfaces when Fuelio/Drive last changed the sync ZIP. It is intentionally separate from Home Assistant's own polling/read time.
+- The Lovelace card adds a current **Tank & räckvidd** overview panel and shows latest Fuelio sync in Versionsinformation. The old notice claiming range was not modelled is removed. Frontend version is beta.9.
+- Existing 36 entity unique IDs remain unchanged; beta.9 only adds new keys. Raw trips, coordinates, VIN/plate, notes and source rows remain private and are not exposed.
+- Google Drive downloading remains an external transport concern (for example the tested Rclone Backup add-on); HA-Fuelio itself still reads a local ZIP and stays read-only.
+
+Upgrade through HACS, restart Home Assistant, re-copy `/config/custom_components/fuelio/www/ha-fuelio-card.js` to `/config/www/ha-fuelio-card.js`, update the existing JavaScript resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.9`, and hard-refresh. Real-HA validation is required before any promotion to `main`.
+
 # HA-Fuelio v0.1.0-beta.8 🚙
 
 Experimental time-aware consumed-fuel costing and vehicle overview. Keep beta.7 as a known reference until real Home Assistant validation.

@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import csv
 from bisect import bisect_left, bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from io import StringIO
+from math import ceil
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
@@ -65,6 +66,13 @@ class FuelioSnapshot:
     total_cost_per_km_year: float | None
     fuel_cost_per_km_all: float | None
     total_cost_per_km_all: float | None
+    distance_since_last_fillup_km: float | None
+    estimated_fuel_remaining_l: float | None
+    estimated_range_remaining_km: float | None
+    estimated_days_to_next_fillup: int | None
+    estimated_next_fillup_date: date | None
+    last_app_sync: datetime | None
+    fuel_forecast: dict
 
 
 def _number(raw: str, *, default: Decimal | None = None) -> Decimal | None:
@@ -168,6 +176,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     logged_km_by_month: dict[str, Decimal] = {}
     trip_count_by_month: dict[str, int] = {}
     logged_km_total = Decimal(0)
+    logged_km_by_day: dict[date, Decimal] = {}
     for trip in sections["TripLog"]:
         day = _date(trip["EndDate"])
         distance = _nonnegative(trip["TripDist"], default=Decimal(0))
@@ -184,6 +193,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             logged_km_by_month[month_key] = logged_km_by_month.get(month_key, Decimal(0)) + km
             trip_count_by_month[month_key] = trip_count_by_month.get(month_key, 0) + 1
             logged_km_total += km
+            logged_km_by_day[day] = logged_km_by_day.get(day, Decimal(0)) + km
         if (day.year, day.month) == (today.year, today.month) and day <= today:
             month_trip_m += distance
         if day <= today and (last_trip is None or day > last_trip):
@@ -212,6 +222,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     last_consumption_day: date | None = None
     valid_prices: list[tuple[Decimal, date]] = []
     valid_consumptions: list[tuple[Decimal, date]] = []
+    tank_capacity = _nonnegative(vehicle.get("Tank1Capacity", ""))
+    fuel_events: list[dict] = []
     for fillup in sections["Log"]:
         day = _date(fillup["Data"])
         volume = _nonnegative(fillup["Fuel (litres)"], default=Decimal(0))
@@ -228,7 +240,15 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         bucket(day)["litres"] += volume
         if (day.year, day.month) == (today.year, today.month):
             month_fuel_cost += cost
-        observe_odometer(day, _nonnegative(fillup.get("Odo (km)", "")))
+        fill_odo = _nonnegative(fillup.get("Odo (km)", ""))
+        observe_odometer(day, fill_odo)
+        fuel_events.append({
+            "day": day,
+            "odo": fill_odo,
+            "volume": volume,
+            "full": fillup.get("Full", "").strip() == "1",
+            "tank": fillup.get("TankNumber", "1").strip() or "1",
+        })
         reported = _nonnegative(fillup.get("l/100km (optional)", ""))
         if reported is not None and (last_consumption_day is None or day > last_consumption_day):
             last_consumption_day = day
@@ -404,6 +424,76 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     latest_values = all_consumptions[-2:]
     latest_two_consumption = (sum(latest_values, Decimal(0)) / len(latest_values)) if latest_values else None
 
+    # Range forecast. A full primary-tank fill is a calibration point. Later
+    # partial fills add their recorded litres; driven distance consumes fuel at
+    # the rolling mean of the latest two valid reported consumption values.
+    # This deliberately stays aggregate-only and never exposes individual trips.
+    latest_odometer_value = max(odometers) if odometers else None
+    primary_events = sorted(
+        (event for event in fuel_events if event["tank"] == "1" and event["odo"] is not None),
+        key=lambda event: (event["day"], event["odo"]),
+    )
+    last_fill_event = primary_events[-1] if primary_events else None
+    distance_since_last_fillup: Decimal | None = None
+    if last_fill_event is not None and latest_odometer_value is not None:
+        if latest_odometer_value >= last_fill_event["odo"]:
+            distance_since_last_fillup = latest_odometer_value - last_fill_event["odo"]
+
+    estimated_fuel_remaining: Decimal | None = None
+    estimated_range_remaining: Decimal | None = None
+    estimated_days_to_next_fillup: int | None = None
+    estimated_next_fillup_date: date | None = None
+    forecast_meta: dict = {
+        "confidence": "unavailable",
+        "consumption_basis_l_per_100km": rounded(latest_two_consumption, 3) if latest_two_consumption is not None else None,
+        "consumption_samples": len(latest_values),
+        "tank_capacity_l": rounded(tank_capacity, 3) if tank_capacity is not None else None,
+        "calibration_full_fillup_date": None,
+        "partial_fillups_since_calibration": 0,
+        "average_daily_distance_30d_km": None,
+        "daily_distance_window_days": 0,
+        "prediction_basis": "theoretical_empty_tank",
+    }
+    full_indexes = [index for index, event in enumerate(primary_events) if event["full"]]
+    if (
+        full_indexes
+        and tank_capacity is not None and tank_capacity > 0
+        and latest_two_consumption is not None and latest_two_consumption > 0
+        and latest_odometer_value is not None
+    ):
+        calibration_index = full_indexes[-1]
+        calibration = primary_events[calibration_index]
+        calibration_odo = calibration["odo"]
+        if calibration_odo is not None and latest_odometer_value >= calibration_odo:
+            later = primary_events[calibration_index + 1:]
+            added_litres = sum((event["volume"] for event in later), Decimal(0))
+            consumed_litres = (latest_odometer_value - calibration_odo) * latest_two_consumption / 100
+            raw_remaining = tank_capacity + added_litres - consumed_litres
+            estimated_fuel_remaining = min(tank_capacity, max(Decimal(0), raw_remaining))
+            estimated_range_remaining = estimated_fuel_remaining / latest_two_consumption * 100
+
+            window_start = today - timedelta(days=29)
+            window_km = sum(
+                (km for day, km in logged_km_by_day.items() if window_start <= day <= today),
+                Decimal(0),
+            )
+            eligible_days = [day for day in logged_km_by_day if day <= today]
+            coverage_start = max(window_start, min(eligible_days)) if eligible_days else today
+            coverage_days = max(1, (today - coverage_start).days + 1)
+            average_daily = window_km / coverage_days
+            if average_daily > 0:
+                estimated_days_to_next_fillup = ceil(float(estimated_range_remaining / average_daily))
+                estimated_next_fillup_date = today + timedelta(days=estimated_days_to_next_fillup)
+
+            calibration_age = (today - calibration["day"]).days
+            forecast_meta.update({
+                "confidence": "normal" if len(latest_values) >= 2 and calibration_age <= 90 else "limited",
+                "calibration_full_fillup_date": calibration["day"].isoformat(),
+                "partial_fillups_since_calibration": len(later),
+                "average_daily_distance_30d_km": rounded(average_daily, 3),
+                "daily_distance_window_days": coverage_days,
+            })
+
     def category_rows(values: dict[str, Decimal]) -> list[dict]:
         # Cap attributes while preserving sums when many user categories exist.
         ordered = sorted(values.items(), key=lambda item: (-item[1], item[0]))
@@ -521,7 +611,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         upcoming_expense_count=upcoming,
         total_actual_cost=rounded(fuel_cost + expenses),
         last_trip_date=last_trip,
-        latest_odometer_km=rounded(max(odometers), 1) if odometers else None,
+        latest_odometer_km=rounded(latest_odometer_value, 1) if latest_odometer_value is not None else None,
         fuel_price_min_year=extrema["fuel_price_min_year"],
         fuel_price_max_year=extrema["fuel_price_max_year"],
         fuel_price_min_all=extrema["fuel_price_min_all"],
@@ -548,6 +638,13 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         total_cost_per_km_year=per_odometer_km(current["fuel"] + current["other"], current["km"]),
         fuel_cost_per_km_all=per_odometer_km(fuel_cost, lifetime_km),
         total_cost_per_km_all=per_odometer_km(fuel_cost + expenses, lifetime_km),
+        distance_since_last_fillup_km=rounded(distance_since_last_fillup, 1) if distance_since_last_fillup is not None else None,
+        estimated_fuel_remaining_l=rounded(estimated_fuel_remaining, 2) if estimated_fuel_remaining is not None else None,
+        estimated_range_remaining_km=rounded(estimated_range_remaining, 1) if estimated_range_remaining is not None else None,
+        estimated_days_to_next_fillup=estimated_days_to_next_fillup,
+        estimated_next_fillup_date=estimated_next_fillup_date,
+        last_app_sync=None,
+        fuel_forecast=forecast_meta,
     )
 
 
@@ -573,4 +670,6 @@ def load_snapshot(path: str, today: date | None = None) -> FuelioSnapshot:
         text = raw.decode("utf-8-sig")
     except UnicodeError as exc:
         raise ValueError("Fuelio CSV must use UTF-8") from exc
-    return parse_backup(text, today=today)
+    snapshot = parse_backup(text, today=today)
+    source_modified = datetime.fromtimestamp(archive.stat().st_mtime).astimezone()
+    return replace(snapshot, last_app_sync=source_modified)

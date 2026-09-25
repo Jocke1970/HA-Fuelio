@@ -45,6 +45,30 @@ def sample_csv(*, metric: bool = True, malformed: bool = False,
     return out.getvalue()
 
 
+def forecast_csv() -> str:
+    out = StringIO()
+    writer = csv.writer(out)
+
+    def section(name, header, *records):
+        writer.writerow([f"## {name}"])
+        writer.writerow(header)
+        writer.writerows(records)
+
+    section("Vehicle", ["Name", "DistUnit", "FuelUnit", "Tank1Capacity"],
+            ["Test vehicle", "0", "0", "60"])
+    section("Log",
+            ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)",
+             "VolumePrice", "l/100km (optional)", "TankNumber"],
+            ["2026-09-10 11:00", "1000", "50", "1", "1000", "20", "6", "1"],
+            ["2026-08-01 11:00", "900", "40", "1", "800", "20", "5.8", "1"])
+    section("Costs", ["Date", "Cost", "isTemplate", "isIncome"])
+    section("TripLog",
+            ["EndDate", "TripDist", "TripDuration", "TripCost", "StartOdo", "EndOdo"],
+            ["2026-09-18 12:00", "18000", "1800", "20", "1010", "1028"],
+            ["2026-08-18 12:00", "2000", "360", "5", "900", "902"])
+    return out.getvalue()
+
+
 class FuelioParserTests(unittest.TestCase):
     def test_summary_and_future_cost_exclusion(self):
         s = parse_backup(sample_csv(), today=date(2026, 9, 21))
@@ -89,6 +113,17 @@ class FuelioParserTests(unittest.TestCase):
                                 today=date(2026, 9, 21))
         self.assertIsNone(snapshot.last_reported_consumption)
 
+    def test_range_forecast_from_latest_full_tank(self):
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        self.assertEqual(snapshot.distance_since_last_fillup_km, 28)
+        self.assertAlmostEqual(snapshot.estimated_fuel_remaining_l, 58.35, places=2)
+        self.assertAlmostEqual(snapshot.estimated_range_remaining_km, 988.9, places=1)
+        self.assertIsNotNone(snapshot.estimated_days_to_next_fillup)
+        self.assertIsNotNone(snapshot.estimated_next_fillup_date)
+        self.assertEqual(snapshot.fuel_forecast["confidence"], "normal")
+        self.assertEqual(snapshot.fuel_forecast["calibration_full_fillup_date"], "2026-09-10")
+        self.assertEqual(snapshot.fuel_forecast["consumption_samples"], 2)
+
     def test_reject_nonmetric(self):
         with self.assertRaisesRegex(ValueError, "metric"):
             parse_backup(sample_csv(metric=False))
@@ -102,7 +137,10 @@ class FuelioParserTests(unittest.TestCase):
             archive = Path(directory) / "synthetic.zip"
             with ZipFile(archive, "w") as z:
                 z.writestr("export.csv", sample_csv())
-            self.assertEqual(load_snapshot(str(archive), date(2026, 9, 21)).trip_count, 2)
+            loaded = load_snapshot(str(archive), date(2026, 9, 21))
+            self.assertEqual(loaded.trip_count, 2)
+            self.assertIsNotNone(loaded.last_app_sync)
+            self.assertIsNotNone(loaded.last_app_sync.tzinfo)
             with ZipFile(archive, "a") as z:
                 z.writestr("other.csv", sample_csv())
             with self.assertRaisesRegex(ValueError, "one unencrypted"):

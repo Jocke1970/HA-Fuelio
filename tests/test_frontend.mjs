@@ -50,6 +50,18 @@ const states = {
   [prefix + "total_actual_cost"]: state(2000),
   [prefix + "estimated_trip_cost"]: state(49),
   [prefix + "last_fillup_date"]: state("2026-09-10"),
+  [prefix + "distance_since_last_fuel_up"]: state(379),
+  [prefix + "estimated_fuel_remaining"]: state(38.93, {
+    confidence: "normal", consumption_basis_l_per_100km: 5.56,
+    calibration_full_fillup_date: "2026-09-12", consumption_samples: 2,
+  }),
+  [prefix + "estimated_range_remaining"]: state(700.1, {
+    confidence: "normal", consumption_basis_l_per_100km: 5.56,
+    calibration_full_fillup_date: "2026-09-12", consumption_samples: 2,
+  }),
+  [prefix + "estimated_days_to_next_fuel_up"]: state(23),
+  [prefix + "estimated_next_fuel_up"]: state("2026-10-18"),
+  [prefix + "last_fuelio_app_sync"]: state("2026-09-25T20:37:31+02:00"),
   [prefix + "fuel_price_min_year"]: state(13.5, { recorded_on: "2026-03-03" }),
   [prefix + "consumption_min_all"]: state("unknown"),
 };
@@ -60,6 +72,13 @@ assert.match(card.shadowRoot.innerHTML, /1\s?200,00 kr/);
 assert.match(card.shadowRoot.innerHTML, /13,5 kr\/L/);
 assert.match(card.shadowRoot.innerHTML, /2026-03-03/);
 assert.match(card.shadowRoot.innerHTML, /Pris- &amp; förbrukningsrekord/);
+assert.match(card.shadowRoot.innerHTML, /Tank &amp; räckvidd/);
+assert.match(card.shadowRoot.innerHTML, /700,1 km/);
+assert.match(card.shadowRoot.innerHTML, /38,93 L/);
+assert.match(card.shadowRoot.innerHTML, /2026-10-18/);
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "version" } }) } });
+assert.equal(card._open.version, true);
+assert.match(card.shadowRoot.innerHTML, /Senaste Fuelio-synk/);
 assert.equal(card._months().length, 2);
 const before = card.shadowRoot.innerHTML;
 card.hass = { states };
