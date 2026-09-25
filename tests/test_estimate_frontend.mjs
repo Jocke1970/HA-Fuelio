@@ -45,7 +45,7 @@ add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_co
 });
 card.hass = { states, entities };
 const before = card.shadowRoot.innerHTML;
-const overview = (html) => html.split('<div class="overview">')[1]?.split('<div class="summary">')[0];
+const overview = (html) => html.split('<div class="overview">')[1]?.split('<div class="tripbar">')[0];
 assert.ok(overview(before), 'four-panel overview must render');
 assert.match(overview(before), /Mätarställning/);
 assert.match(overview(before), /Drivmedel/);
