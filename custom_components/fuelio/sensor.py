@@ -40,6 +40,12 @@ DESCRIPTIONS: tuple[FuelioSensorDescription, ...] = (
     FuelioSensorDescription(key="total_actual_cost", name="Total actual expenditure", native_unit_of_measurement="SEK", device_class=SensorDeviceClass.MONETARY),
     FuelioSensorDescription(key="last_trip_date", name="Last trip", device_class=SensorDeviceClass.DATE),
     FuelioSensorDescription(key="latest_odometer_km", name="Latest odometer", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE),
+    FuelioSensorDescription(key="distance_since_last_fillup_km", name="Distance since last fuel-up", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE, icon="mdi:map-marker-distance"),
+    FuelioSensorDescription(key="estimated_fuel_remaining_l", name="Estimated fuel remaining", native_unit_of_measurement="L", device_class=SensorDeviceClass.VOLUME, icon="mdi:gas-station"),
+    FuelioSensorDescription(key="estimated_range_remaining_km", name="Estimated range remaining", native_unit_of_measurement="km", device_class=SensorDeviceClass.DISTANCE, icon="mdi:map-marker-distance"),
+    FuelioSensorDescription(key="estimated_days_to_next_fillup", name="Estimated days to next fuel-up", native_unit_of_measurement="d", icon="mdi:calendar-clock"),
+    FuelioSensorDescription(key="estimated_next_fillup_date", name="Estimated next fuel-up", device_class=SensorDeviceClass.DATE, icon="mdi:calendar-alert"),
+    FuelioSensorDescription(key="last_app_sync", name="Last Fuelio app sync", device_class=SensorDeviceClass.TIMESTAMP, icon="mdi:cloud-sync"),
     # Six explicit calendar/lifetime ratios and two period-specific fill-up counters.
     # Keep stable unique keys/legacy entity IDs, but use OBD/tanking ODO deltas as denominator.
     FuelioSensorDescription(key="fuel_count_month", name="Fuel-ups this month", icon="mdi:gas-station"),
@@ -111,6 +117,17 @@ class FuelioSensor(CoordinatorEntity[FuelioCoordinator], SensorEntity):
                 "history_truncated": snapshot.monthly_history_truncated,
                 "months_limit": 120,
             }
+        if key in {
+            "estimated_fuel_remaining_l",
+            "estimated_range_remaining_km",
+            "estimated_days_to_next_fillup",
+            "estimated_next_fillup_date",
+        }:
+            return dict(snapshot.fuel_forecast)
+        if key == "distance_since_last_fillup_km":
+            return {"last_fillup_date": snapshot.last_fillup_date.isoformat() if snapshot.last_fillup_date else None}
+        if key == "last_app_sync":
+            return {"source": "local_zip_mtime", "meaning": "Fuelio/Drive source modification time preserved by rclone"}
         if key in snapshot.record_dates:
             return {"recorded_on": snapshot.record_dates[key]}
         return None
