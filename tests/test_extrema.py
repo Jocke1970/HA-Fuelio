@@ -91,7 +91,7 @@ class FuelioExtremaTests(unittest.TestCase):
         path = Path(__file__).resolve().parents[1] / "custom_components" / "fuelio" / "sensor.py"
         source = path.read_text(encoding="utf-8")
         keys = re.findall(r'FuelioSensorDescription\(key="([^"]+)"', source)
-        self.assertEqual(len(keys), 36)
+        self.assertEqual(len(keys), 42)
         self.assertEqual(len(keys), len(set(keys)))
         self.assertIn('f"{entry.entry_id}_{description.key}"', source)
         self.assertIn('identifiers={(DOMAIN, entry.entry_id)}', source)
