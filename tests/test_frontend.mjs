@@ -37,6 +37,11 @@ const states = {
   [prefix + "monthly_cost_breakdown"]: state(1200, { months: [
     { month: "2026-09", fuel: 1000, other: 200, total: 1200 },
     { month: "2026-08", fuel: 800, other: 0, total: 800 },
+  ], years: [
+    { year: "2026", fuel: 1800, other: 200, total: 2000, km: 350, litres: 100, fuel_ups: 4, trip_count: 20,
+      average_trip_km: 17.5, average_reported_consumption: 5.56, reported_consumption_samples: 2,
+      average_fuel_price: 18, fuel_price_min: 17, fuel_price_max: 20, consumption_min: 5.3, consumption_max: 5.8,
+      categories: [{ name: "Parkering", amount: 200 }] }
   ], history_truncated: false }),
   [prefix + "latest_odometer_km"]: state(10001),
   [prefix + "trip_count"]: state(20),
@@ -75,6 +80,9 @@ assert.match(card.shadowRoot.innerHTML, /700,1 km/);
 assert.match(card.shadowRoot.innerHTML, /38,93 L/);
 assert.match(card.shadowRoot.innerHTML, /2026-10-18/);
 assert.match(card.shadowRoot.innerHTML, /ZIP uppdaterad/);
+assert.match(card.shadowRoot.innerHTML, /Årsöversikt/);
+assert.match(card.shadowRoot.innerHTML, /Årsrapport · 2026/);
+assert.equal(card._years().length, 1);
 card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "records" } }) } });
 assert.equal(card._open.records, true);
 assert.match(card.shadowRoot.innerHTML, /13,5 kr\/L/);
