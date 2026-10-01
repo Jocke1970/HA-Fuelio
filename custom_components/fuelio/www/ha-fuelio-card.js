@@ -188,13 +188,14 @@ const ENTITY_SLUGS = Object.freeze({
       this._signature = null;
       this.shadowRoot.addEventListener("click", (event) => {
         const close = event.target.closest?.("[data-chart-close]");
-        if (close || event.target?.classList?.contains?.("chart-backdrop")) {
+        const isClose = close?.dataset && Object.prototype.hasOwnProperty.call(close.dataset, "chartClose");
+        if (isClose || event.target?.classList?.contains?.("chart-backdrop")) {
           this._chart = null;
           this._render();
           return;
         }
         const chartTarget = event.target.closest?.("[data-chart]");
-        if (chartTarget) {
+        if (chartTarget?.dataset?.chart) {
           this._chart = {
             id: chartTarget.dataset.chart,
             year: chartTarget.dataset.chartYear || this._year || String(new Date().getFullYear()),
