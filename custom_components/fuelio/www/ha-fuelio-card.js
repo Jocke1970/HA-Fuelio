@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.12 — annual overview, desktop-first, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.13 — interactive SVG charts, desktop-first, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.12";
+  const CARD_VERSION = "0.1.0-beta.13";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -70,6 +70,12 @@ const ENTITY_SLUGS = Object.freeze({
     .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
     .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
     .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; }
+    button.kpi,button.tile { appearance:none; color:inherit; font:inherit; width:100%; }
+    button.tile { background:var(--card-background-color,#fff); }
+    .chart-action { cursor:pointer; position:relative; transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease; }
+    .chart-action:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
+    .chart-action:focus-visible,.category-chart:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:2px; }
+    .chart-hint { display:block; margin-top:5px; font-size:.62rem; color:var(--primary-color,#03a9f4); font-weight:750; }
     .overview { display:grid; grid-template-columns:1fr; gap:12px; }
     .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
     .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
@@ -108,6 +114,8 @@ const ENTITY_SLUGS = Object.freeze({
     .small { font-size:.72rem; }
     .foot { text-align:right; margin-top:12px; }
     .category-list { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:3px 11px; }
+    .category-chart { cursor:pointer; transition:border-color .12s ease,box-shadow .12s ease; }
+    .category-chart:hover { border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
     .category-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--divider-color,#e2e4e8); font-size:.79rem; }
     .category-row:last-child { border:0; }
     .category-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -116,6 +124,28 @@ const ENTITY_SLUGS = Object.freeze({
     .annual-block { min-width:0; }
     .annual-hero { margin-bottom:2px; }
     .records-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .chart-backdrop { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:18px; background:#0008; backdrop-filter:blur(4px); }
+    .chart-modal { width:min(1100px,96vw); max-height:92vh; overflow:auto; border:1px solid var(--divider-color,#e2e4e8); border-radius:24px; background:var(--ha-card-background,var(--card-background-color,#fff)); color:var(--primary-text-color,#202124); box-shadow:0 24px 80px #0008; }
+    .chart-head { position:sticky; top:0; z-index:2; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px 14px; border-bottom:1px solid var(--divider-color,#e2e4e8); background:var(--ha-card-background,var(--card-background-color,#fff)); }
+    .chart-head h3 { font-size:1.15rem; margin:0 0 4px; }
+    .chart-close { flex:none; width:38px; height:38px; border:1px solid var(--divider-color,#e2e4e8); border-radius:999px; background:var(--secondary-background-color,#f4f5f7); color:inherit; cursor:pointer; font-size:1.05rem; }
+    .chart-body { padding:16px 18px 8px; }
+    .chart-wrap { width:100%; overflow-x:auto; }
+    .chart-svg { display:block; width:100%; min-width:640px; height:auto; overflow:visible; }
+    .chart-svg text { fill:var(--secondary-text-color,#68727d); font-size:13px; font-family:inherit; }
+    .chart-svg .axis-strong { fill:var(--primary-text-color,#202124); font-weight:750; }
+    .chart-svg .gridline { stroke:var(--divider-color,#dfe3e8); stroke-width:1; }
+    .chart-svg .series-a-fill { fill:var(--primary-color,#03a9f4); }
+    .chart-svg .series-b-fill { fill:var(--accent-color,#ff9800); }
+    .chart-svg .series-a-line { fill:none; stroke:var(--primary-color,#03a9f4); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-svg .series-b-line { fill:none; stroke:var(--accent-color,#ff9800); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-svg .series-a-dot { fill:var(--primary-color,#03a9f4); stroke:var(--card-background-color,#fff); stroke-width:2; }
+    .chart-svg .series-b-dot { fill:var(--accent-color,#ff9800); stroke:var(--card-background-color,#fff); stroke-width:2; }
+    .chart-legend { display:flex; flex-wrap:wrap; gap:12px 20px; padding:2px 4px 12px; color:var(--secondary-text-color,#68727d); font-size:.76rem; }
+    .chart-legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--primary-color,#03a9f4); }
+    .chart-legend span:nth-child(2)::before { background:var(--accent-color,#ff9800); }
+    .chart-note { margin:0 18px 18px; padding:10px 12px; border-radius:12px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); font-size:.74rem; line-height:1.4; }
+    .chart-empty { padding:44px 20px; text-align:center; color:var(--secondary-text-color,#68727d); }
     @container (min-width:720px) {
       .shell { padding:22px; }
       .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
@@ -155,14 +185,46 @@ const ENTITY_SLUGS = Object.freeze({
       this._open = { annual: true, costs: true, fuel: true, records: false, service: false, version: false };
       this._month = null;
       this._year = null;
+      this._chart = null;
       this._signature = null;
       this.shadowRoot.addEventListener("click", (event) => {
+        const close = event.target.closest?.("[data-chart-close]");
+        const isClose = close?.dataset && Object.prototype.hasOwnProperty.call(close.dataset, "chartClose");
+        if (isClose || event.target?.classList?.contains?.("chart-backdrop")) {
+          this._chart = null;
+          this._render();
+          return;
+        }
+        const chartTarget = event.target.closest?.("[data-chart]");
+        if (chartTarget?.dataset?.chart) {
+          this._chart = {
+            id: chartTarget.dataset.chart,
+            year: chartTarget.dataset.chartYear || this._year || String(new Date().getFullYear()),
+          };
+          this._render();
+          return;
+        }
         const button = event.target.closest?.("button[data-section]");
         if (!button) return;
         const section = button.dataset.section;
         if (!Object.prototype.hasOwnProperty.call(this._open, section)) return;
         this._open[section] = !this._open[section];
         this._render();
+      });
+      this.shadowRoot.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && this._chart) {
+          this._chart = null;
+          this._render();
+          return;
+        }
+        if ((event.key === "Enter" || event.key === " ") && event.target?.matches?.(".category-chart[data-chart]")) {
+          event.preventDefault();
+          this._chart = {
+            id: event.target.dataset.chart,
+            year: event.target.dataset.chartYear || this._year || String(new Date().getFullYear()),
+          };
+          this._render();
+        }
       });
       this.shadowRoot.addEventListener("change", (event) => {
         const candidate = event.target?.value;
@@ -259,15 +321,152 @@ const ENTITY_SLUGS = Object.freeze({
       return rows.filter((row) => row && /^\d{4}$/.test(String(row.year)) &&
         ["fuel", "other", "total"].every((key) => Number.isFinite(row[key]))).slice(0, 40);
     }
-    _tile(icon, label, value, detail = "") {
-      return `<div class="tile"><span class="ico" aria-hidden="true">${icon}</span><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}</div>`;
+    _chartAttrs(chart, year) {
+      if (!chart) return "";
+      const safeYear = /^\d{4}$/.test(String(year || "")) ? String(year) : "";
+      return ` data-chart="${esc(chart)}"${safeYear ? ` data-chart-year="${safeYear}"` : ""}`;
+    }
+    _tile(icon, label, value, detail = "", chart = null, year = null) {
+      const inner = `<span class="ico" aria-hidden="true">${icon}</span><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}`;
+      return chart
+        ? `<button type="button" class="tile chart-action"${this._chartAttrs(chart, year)} aria-label="${esc(label)} – visa graf">${inner}</button>`
+        : `<div class="tile">${inner}</div>`;
+    }
+    _kpi(icon, label, value, detail = "", chart = null, year = null) {
+      const inner = `<div class="label">${icon} ${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}`;
+      return chart
+        ? `<button type="button" class="kpi chart-action"${this._chartAttrs(chart, year)} aria-label="${esc(label)} – visa graf">${inner}</button>`
+        : `<div class="kpi">${inner}</div>`;
+    }
+    _monthsForYear(year) {
+      return this._months().filter((row) => row.month.startsWith(`${year}-`)).sort((a, b) => a.month.localeCompare(b.month));
+    }
+    _monthLabel(key) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key || ""))) return "—";
+      return new Intl.DateTimeFormat("sv-SE", { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
+    }
+    _chartNumber(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    _chartGrid(maxValue, left, top, plotWidth, plotHeight, unit = "") {
+      const scaleMax = Math.max(Number(maxValue) || 0, 1);
+      return Array.from({ length:5 }, (_, index) => {
+        const ratio = index / 4;
+        const y = top + plotHeight - ratio * plotHeight;
+        const value = scaleMax * ratio;
+        return `<line class="gridline" x1="${left}" y1="${y}" x2="${left + plotWidth}" y2="${y}"></line><text x="${left - 10}" y="${y + 4}" text-anchor="end">${esc(fmt.format(value))}${unit ? ` ${esc(unit)}` : ""}</text>`;
+      }).join("");
+    }
+    _barChart(rows, series, unit = "", stacked = false) {
+      if (!rows.length) return `<div class="chart-empty">Ingen månadsdata för valt år.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const totals = rows.map((row) => stacked
+        ? series.reduce((sum, item) => sum + (this._chartNumber(row[item.key]) ?? 0), 0)
+        : Math.max(...series.map((item) => this._chartNumber(row[item.key]) ?? 0)));
+      const maxValue = Math.max(...totals, 1) * 1.1;
+      const step = plotWidth / rows.length;
+      const groupWidth = Math.min(step * .68, 62);
+      const barWidth = stacked ? groupWidth : groupWidth / Math.max(series.length, 1);
+      let bars = "";
+      rows.forEach((row, rowIndex) => {
+        let accumulated = 0;
+        series.forEach((item, seriesIndex) => {
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) return;
+          const h = value / maxValue * plotHeight;
+          const x = left + rowIndex * step + (step - groupWidth) / 2 + (stacked ? 0 : seriesIndex * barWidth);
+          const y = stacked ? top + plotHeight - (accumulated + value) / maxValue * plotHeight : top + plotHeight - h;
+          bars += `<rect class="${seriesIndex === 0 ? "series-a-fill" : "series-b-fill"}" x="${x}" y="${y}" width="${Math.max(barWidth - (stacked ? 0 : 2), 3)}" height="${Math.max(h, 0)}" rx="4"><title>${esc(monthName(row.month))} · ${esc(item.label)}: ${esc(decimal(value, unit))}</title></rect>`;
+          if (stacked) accumulated += value;
+        });
+        bars += `<text x="${left + rowIndex * step + step / 2}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(this._monthLabel(row.month))}</text>`;
+      });
+      const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
+      return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}</svg></div>`;
+    }
+    _lineChart(rows, series, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen månadsdata för valt år.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const values = rows.flatMap((row) => series.map((item) => this._chartNumber(row[item.key])).filter((value) => value !== null));
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = rows.length > 1 ? plotWidth / (rows.length - 1) : plotWidth;
+      let shapes = "";
+      series.forEach((item, seriesIndex) => {
+        let segment = [];
+        const flush = () => {
+          if (segment.length > 1) shapes += `<polyline class="${seriesIndex === 0 ? "series-a-line" : "series-b-line"}" points="${segment.join(" ")}"></polyline>`;
+          segment = [];
+        };
+        rows.forEach((row, rowIndex) => {
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) { flush(); return; }
+          const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+          const y = top + plotHeight - value / maxValue * plotHeight;
+          segment.push(`${x},${y}`);
+          shapes += `<circle class="${seriesIndex === 0 ? "series-a-dot" : "series-b-dot"}" cx="${x}" cy="${y}" r="5"><title>${esc(monthName(row.month))} · ${esc(item.label)}: ${esc(decimal(value, unit))}</title></circle>`;
+        });
+        flush();
+      });
+      const labels = rows.map((row,rowIndex) => {
+        const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+        return `<text x="${x}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(this._monthLabel(row.month))}</text>`;
+      }).join("");
+      const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
+      return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${shapes}${labels}</svg></div>`;
+    }
+    _categoryChart(rows) {
+      const values = Array.isArray(rows) ? rows.filter((row) => row && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0) : [];
+      if (!values.length) return `<div class="chart-empty">Inga kategoriserade utgifter för valt år.</div>`;
+      const width = 900, rowHeight = 44, left = 220, right = 100, top = 18, bottom = 20;
+      const height = top + bottom + values.length * rowHeight;
+      const plotWidth = width - left - right;
+      const maxValue = Math.max(...values.map((row) => Number(row.amount)), 1);
+      const body = values.map((row,index) => {
+        const value = Number(row.amount);
+        const y = top + index * rowHeight;
+        const barWidth = value / maxValue * plotWidth;
+        return `<text class="axis-strong" x="${left - 12}" y="${y + 25}" text-anchor="end">${esc(row.name)}</text><rect class="series-a-fill" x="${left}" y="${y + 8}" width="${barWidth}" height="24" rx="6"><title>${esc(row.name)}: ${esc(kroner(value))}</title></rect><text x="${left + plotWidth + 12}" y="${y + 25}">${esc(kroner(value))}</text>`;
+      }).join("");
+      return `<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${body}</svg></div>`;
+    }
+    _chartModal() {
+      if (!this._chart) return "";
+      const year = /^\d{4}$/.test(String(this._chart.year || "")) ? String(this._chart.year) : String(new Date().getFullYear());
+      const months = this._monthsForYear(year);
+      const annual = this._years().find((row) => String(row.year) === year);
+      let title = "Graf", content = "", note = "";
+      if (this._chart.id === "costs") {
+        title = "💳 Kostnader per månad";
+        content = this._barChart(months, [{key:"fuel",label:"Bränsle"},{key:"other",label:"Övrigt"}], "kr", true);
+        note = "Staplarna visar bokförda kostnader på betalnings-/tankningsdatum. Bränsle och övriga utgifter är staplade.";
+      } else if (this._chart.id === "distance") {
+        title = "🛣️ Avläst körsträcka per månad";
+        content = this._barChart(months, [{key:"km",label:"ODO-körsträcka"}], "km");
+        note = "Körsträckan bygger på Fuelios ODO-checkpoints. Första importerade månaden kan vara en delperiod.";
+      } else if (this._chart.id === "litres") {
+        title = "🛢️ Tankad volym per månad";
+        content = this._barChart(months, [{key:"litres",label:"Tankade liter"}], "L");
+        note = "Visar inköpt bränsle per månad, inte beräknat förbrukat bränsle.";
+      } else if (this._chart.id === "cost-per-km") {
+        title = "📏 Kostnad per avläst ODO-km";
+        content = this._lineChart(months, [{key:"total_per_logged_km",label:"Bokfört totalt/km"},{key:"estimated_total_per_km",label:"Beräknad total/km"}], "kr/km");
+        note = "Bokfört värde är faktiska utgifter ÷ ODO-differens. Beräknat värde använder uppskattad kostnad för förbrukat bränsle plus bokförda övriga utgifter.";
+      } else if (this._chart.id === "categories") {
+        title = "🧾 Utgifter per kategori";
+        content = this._categoryChart(annual?.categories);
+        note = "Kategorierna är årsaggregat från Fuelio. Mallposter och inkomster ingår inte.";
+      } else {
+        content = `<div class="chart-empty">Grafen är inte tillgänglig ännu.</div>`;
+      }
+      return `<div class="chart-backdrop"><section class="chart-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="chart-head"><div><h3>${esc(title)}</h3><div class="muted">År ${esc(year)}</div></div><button type="button" class="chart-close" data-chart-close aria-label="Stäng graf">✕</button></div><div class="chart-body">${content}</div>${note ? `<div class="chart-note">${esc(note)}</div>` : ""}</section></div>`;
     }
     _panel(icon, title, rows) {
       return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
-    }
-    _kpi(icon, label, value, detail = "") {
-      return `<div class="kpi"><div class="label">${icon} ${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}</div>`;
     }
     _rangePanel(forecast) {
       const remaining = this._value("estimated_fuel_remaining_l");
@@ -314,7 +513,7 @@ const ENTITY_SLUGS = Object.freeze({
       }
       const annualYear = allYears.find((item) => String(item.year) === this._year) || null;
       const yearTotal = selectedYear?.total ?? allMonths.filter((item) => item.month.startsWith(`${currentYear}-`)).reduce((sum, item) => sum + item.total, 0);
-      const categories = (values, heading) => `<div class="section-title">${esc(heading)}</div>${Array.isArray(values) && values.length ? `<div class="category-list">${values.map((item) => `<div class="category-row"><span>${esc(item.name)}</span><strong>${esc(kroner(item.amount))}</strong></div>`).join("")}</div>` : `<div class="notice">Inga kategoriserade utgifter för perioden.</div>`}`;
+      const categories = (values, heading, chart = null, year = null) => `<div class="section-title">${esc(heading)}</div>${Array.isArray(values) && values.length ? `<div class="category-list${chart ? " category-chart" : ""}"${chart ? `${this._chartAttrs(chart, year)} role="button" tabindex="0" aria-label="${esc(heading)} – visa graf"` : ""}>${values.map((item) => `<div class="category-row"><span>${esc(item.name)}</span><strong>${esc(kroner(item.amount))}</strong></div>`).join("")}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}</div>` : `<div class="notice">Inga kategoriserade utgifter för perioden.</div>`}`;
       const historyTruncated = this._state("monthly_cost_breakdown")?.attributes?.history_truncated === true;
       const title = typeof this._config.title === "string" ? this._config.title : "Fuelio · Bilöversikt";
       const isAvailable = valid(this._state("monthly_cost_breakdown"));
@@ -334,10 +533,10 @@ const ENTITY_SLUGS = Object.freeze({
       const syncText = dateTime(this._state("last_app_sync")?.state);
       const kpis = `<div class="kpi-strip">
         ${this._kpi("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
-        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth))}
+        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth), "distance", nowMonth?.month?.slice(0,4))}
         ${this._kpi("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
-        ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total))}
-        ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth))}
+        ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total), "", "costs", nowMonth?.month?.slice(0,4))}
+        ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth), "cost-per-km", nowMonth?.month?.slice(0,4))}
         ${this._kpi("🧭", "Räckvidd kvar", decimal(this._value("estimated_range_remaining_km"), "km"))}
       </div>`;
       const overview = `<div class="overview">
@@ -367,10 +566,10 @@ const ENTITY_SLUGS = Object.freeze({
       <select id="fuelio-year" ${allYears.length ? "" : "disabled"}>${allYears.map((row) => `<option value="${esc(String(row.year))}" ${String(row.year) === this._year ? "selected" : ""}>${esc(String(row.year))}</option>`).join("")}</select>
       <div class="section-title annual-hero">Årsrapport · ${esc(this._year || "—")}</div>
       <div class="annual-grid">
-        ${this._tile("🛣️", "Avläst körsträcka", decimal(annualYear?.km, "km"), odoNote(annualYear))}
+        ${this._tile("🛣️", "Avläst körsträcka", decimal(annualYear?.km, "km"), odoNote(annualYear), "distance", this._year)}
         ${this._tile("🚙", "Loggade resor", decimal(annualYear?.trip_count, "st"))}
         ${this._tile("📏", "Genomsnitt/resa", decimal(annualYear?.average_trip_km, "km"))}
-        ${this._tile("🛢️", "Tankad volym", decimal(annualYear?.litres, "L"))}
+        ${this._tile("🛢️", "Tankad volym", decimal(annualYear?.litres, "L"), "", "litres", this._year)}
         ${this._tile("⛽", "Tankningar", decimal(annualYear?.fuel_ups, "st"))}
         ${this._tile("📉", "Rapporterat snitt", decimal(annualYear?.average_reported_consumption, "L/100 km"), `${annualYear?.reported_consumption_samples ?? 0} giltiga mätningar`)}
       </div>
@@ -380,10 +579,10 @@ const ENTITY_SLUGS = Object.freeze({
           <div class="grid">
             ${this._tile("⛽", "Bränsle", kroner(annualYear?.fuel))}
             ${this._tile("🧾", "Övriga utgifter", kroner(annualYear?.other))}
-            ${this._tile("💳", "Totalt", kroner(annualYear?.total))}
-            ${this._tile("📏", "Bokfört totalt/km", decimal(annualYear?.total_per_logged_km, "kr/km"), "Bokförda utgifter ÷ ODO-differens")}
+            ${this._tile("💳", "Totalt", kroner(annualYear?.total), "", "costs", this._year)}
+            ${this._tile("📏", "Bokfört totalt/km", decimal(annualYear?.total_per_logged_km, "kr/km"), "Bokförda utgifter ÷ ODO-differens", "cost-per-km", this._year)}
             ${this._tile("🔥", "Beräknat förbrukat bränsle", kroner(annualYear?.estimated_fuel), coverageText(annualYear))}
-            ${this._tile("📐", "Beräknad total/km", decimal(annualYear?.estimated_total_per_km, "kr/km"), coverageText(annualYear))}
+            ${this._tile("📐", "Beräknad total/km", decimal(annualYear?.estimated_total_per_km, "kr/km"), coverageText(annualYear), "cost-per-km", this._year)}
           </div>
         </div>
         <div class="annual-block">
@@ -396,13 +595,13 @@ const ENTITY_SLUGS = Object.freeze({
             ${this._tile("↗️", "Högsta förbrukning", decimal(annualYear?.consumption_max, "L/100 km"))}
             ${this._tile("📊", "Förbrukningsunderlag", decimal(annualYear?.reported_consumption_samples, "st"), "Rapporterade positiva värden")}
           </div>
-          ${categories(annualYear?.categories, `Utgifter per kategori · ${this._year || "—"}`)}
+          ${categories(annualYear?.categories, `Utgifter per kategori · ${this._year || "—"}`, "categories", this._year)}
         </div>
       </div>
       <div class="notice">Årsrapporten använder Fuelios importerade data för valt kalenderår. Första importerade året kan vara en delperiod; avläst körsträcka bygger på ODO-checkpoints. Rapporterat snitt är medelvärdet av årets giltiga positiva L/100 km-poster. Genomsnittligt literpris är faktiskt bokförd bränslekostnad delat med årets tankade liter.</div>`;
 
       const costs = `<div class="grid">
-        ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total))}
+        ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total), "", "costs", allMonths[0]?.month?.slice(0,4))}
         ${this._tile("🗓️", `År ${currentYear}`, allMonths.length ? kroner(yearTotal) : "—")}
       </div><label class="select-label" for="fuelio-month">Visa månad</label>
       <select id="fuelio-month" ${allMonths.length ? "" : "disabled"}>${allMonths.map((row) => `<option value="${esc(row.month)}" ${row.month === this._month ? "selected" : ""}>${esc(monthName(row.month))}</option>`).join("")}</select>
@@ -487,13 +686,13 @@ const ENTITY_SLUGS = Object.freeze({
           ${this._section("version", "ℹ️", "Versionsinformation", version)}
         </div>
         <div class="foot muted">Fuelio · read-only · ${CARD_VERSION}</div>
-      </div></ha-card>`;
+      </div></ha-card>${this._chartModal()}`;
     }
   }
 
   if (!customElements.get("ha-fuelio-card")) customElements.define("ha-fuelio-card", HaFuelioCard);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((card) => card.type === "ha-fuelio-card")) {
-    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard med årsöversikt, kostnader, tankningar och historiska rekord." });
+    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard med årsöversikt, interaktiva grafer, kostnader, tankningar och historiska rekord." });
   }
 })();
