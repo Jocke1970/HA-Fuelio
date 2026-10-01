@@ -506,7 +506,7 @@ const ENTITY_SLUGS = Object.freeze({
       }
       const annualYear = allYears.find((item) => String(item.year) === this._year) || null;
       const yearTotal = selectedYear?.total ?? allMonths.filter((item) => item.month.startsWith(`${currentYear}-`)).reduce((sum, item) => sum + item.total, 0);
-      const categories = (values, heading) => `<div class="section-title">${esc(heading)}</div>${Array.isArray(values) && values.length ? `<div class="category-list">${values.map((item) => `<div class="category-row"><span>${esc(item.name)}</span><strong>${esc(kroner(item.amount))}</strong></div>`).join("")}</div>` : `<div class="notice">Inga kategoriserade utgifter för perioden.</div>`}`;
+      const categories = (values, heading, chart = null, year = null) => `<div class="section-title">${esc(heading)}</div>${Array.isArray(values) && values.length ? `<div class="category-list${chart ? " category-chart" : ""}"${chart ? `${this._chartAttrs(chart, year)} role="button" tabindex="0" aria-label="${esc(heading)} – visa graf"` : ""}>${values.map((item) => `<div class="category-row"><span>${esc(item.name)}</span><strong>${esc(kroner(item.amount))}</strong></div>`).join("")}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}</div>` : `<div class="notice">Inga kategoriserade utgifter för perioden.</div>`}`;
       const historyTruncated = this._state("monthly_cost_breakdown")?.attributes?.history_truncated === true;
       const title = typeof this._config.title === "string" ? this._config.title : "Fuelio · Bilöversikt";
       const isAvailable = valid(this._state("monthly_cost_breakdown"));
@@ -526,10 +526,10 @@ const ENTITY_SLUGS = Object.freeze({
       const syncText = dateTime(this._state("last_app_sync")?.state);
       const kpis = `<div class="kpi-strip">
         ${this._kpi("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
-        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth))}
+        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth), "distance", nowMonth?.month?.slice(0,4))}
         ${this._kpi("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
-        ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total))}
-        ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth))}
+        ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total), "", "costs", nowMonth?.month?.slice(0,4))}
+        ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth), "cost-per-km", nowMonth?.month?.slice(0,4))}
         ${this._kpi("🧭", "Räckvidd kvar", decimal(this._value("estimated_range_remaining_km"), "km"))}
       </div>`;
       const overview = `<div class="overview">
@@ -559,10 +559,10 @@ const ENTITY_SLUGS = Object.freeze({
       <select id="fuelio-year" ${allYears.length ? "" : "disabled"}>${allYears.map((row) => `<option value="${esc(String(row.year))}" ${String(row.year) === this._year ? "selected" : ""}>${esc(String(row.year))}</option>`).join("")}</select>
       <div class="section-title annual-hero">Årsrapport · ${esc(this._year || "—")}</div>
       <div class="annual-grid">
-        ${this._tile("🛣️", "Avläst körsträcka", decimal(annualYear?.km, "km"), odoNote(annualYear))}
+        ${this._tile("🛣️", "Avläst körsträcka", decimal(annualYear?.km, "km"), odoNote(annualYear), "distance", this._year)}
         ${this._tile("🚙", "Loggade resor", decimal(annualYear?.trip_count, "st"))}
         ${this._tile("📏", "Genomsnitt/resa", decimal(annualYear?.average_trip_km, "km"))}
-        ${this._tile("🛢️", "Tankad volym", decimal(annualYear?.litres, "L"))}
+        ${this._tile("🛢️", "Tankad volym", decimal(annualYear?.litres, "L"), "", "litres", this._year)}
         ${this._tile("⛽", "Tankningar", decimal(annualYear?.fuel_ups, "st"))}
         ${this._tile("📉", "Rapporterat snitt", decimal(annualYear?.average_reported_consumption, "L/100 km"), `${annualYear?.reported_consumption_samples ?? 0} giltiga mätningar`)}
       </div>
@@ -572,10 +572,10 @@ const ENTITY_SLUGS = Object.freeze({
           <div class="grid">
             ${this._tile("⛽", "Bränsle", kroner(annualYear?.fuel))}
             ${this._tile("🧾", "Övriga utgifter", kroner(annualYear?.other))}
-            ${this._tile("💳", "Totalt", kroner(annualYear?.total))}
-            ${this._tile("📏", "Bokfört totalt/km", decimal(annualYear?.total_per_logged_km, "kr/km"), "Bokförda utgifter ÷ ODO-differens")}
+            ${this._tile("💳", "Totalt", kroner(annualYear?.total), "", "costs", this._year)}
+            ${this._tile("📏", "Bokfört totalt/km", decimal(annualYear?.total_per_logged_km, "kr/km"), "Bokförda utgifter ÷ ODO-differens", "cost-per-km", this._year)}
             ${this._tile("🔥", "Beräknat förbrukat bränsle", kroner(annualYear?.estimated_fuel), coverageText(annualYear))}
-            ${this._tile("📐", "Beräknad total/km", decimal(annualYear?.estimated_total_per_km, "kr/km"), coverageText(annualYear))}
+            ${this._tile("📐", "Beräknad total/km", decimal(annualYear?.estimated_total_per_km, "kr/km"), coverageText(annualYear), "cost-per-km", this._year)}
           </div>
         </div>
         <div class="annual-block">
@@ -588,13 +588,13 @@ const ENTITY_SLUGS = Object.freeze({
             ${this._tile("↗️", "Högsta förbrukning", decimal(annualYear?.consumption_max, "L/100 km"))}
             ${this._tile("📊", "Förbrukningsunderlag", decimal(annualYear?.reported_consumption_samples, "st"), "Rapporterade positiva värden")}
           </div>
-          ${categories(annualYear?.categories, `Utgifter per kategori · ${this._year || "—"}`)}
+          ${categories(annualYear?.categories, `Utgifter per kategori · ${this._year || "—"}`, "categories", this._year)}
         </div>
       </div>
       <div class="notice">Årsrapporten använder Fuelios importerade data för valt kalenderår. Första importerade året kan vara en delperiod; avläst körsträcka bygger på ODO-checkpoints. Rapporterat snitt är medelvärdet av årets giltiga positiva L/100 km-poster. Genomsnittligt literpris är faktiskt bokförd bränslekostnad delat med årets tankade liter.</div>`;
 
       const costs = `<div class="grid">
-        ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total))}
+        ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total), "", "costs", allMonths[0]?.month?.slice(0,4))}
         ${this._tile("🗓️", `År ${currentYear}`, allMonths.length ? kroner(yearTotal) : "—")}
       </div><label class="select-label" for="fuelio-month">Visa månad</label>
       <select id="fuelio-month" ${allMonths.length ? "" : "disabled"}>${allMonths.map((row) => `<option value="${esc(row.month)}" ${row.month === this._month ? "selected" : ""}>${esc(monthName(row.month))}</option>`).join("")}</select>
@@ -679,13 +679,13 @@ const ENTITY_SLUGS = Object.freeze({
           ${this._section("version", "ℹ️", "Versionsinformation", version)}
         </div>
         <div class="foot muted">Fuelio · read-only · ${CARD_VERSION}</div>
-      </div></ha-card>`;
+      </div></ha-card>${this._chartModal()}`;
     }
   }
 
   if (!customElements.get("ha-fuelio-card")) customElements.define("ha-fuelio-card", HaFuelioCard);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((card) => card.type === "ha-fuelio-card")) {
-    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard med årsöversikt, kostnader, tankningar och historiska rekord." });
+    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard med årsöversikt, interaktiva grafer, kostnader, tankningar och historiska rekord." });
   }
 })();
