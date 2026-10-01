@@ -1,4 +1,4 @@
-# Fuelio analytics schema — beta.8 (2026-09-22)
+# Fuelio analytics schema — beta.12 (2026-10-01)
 
 This is the aggregate-only parsing contract. The historical beta.6 logged-trip-distance formula is **obsolete**; the old six entity ID slugs retain `_logged_km` solely for registry compatibility, while the actual denominator is now observed odometer distance.
 
@@ -25,7 +25,7 @@ Both models allocate incomplete checkpoint-boundary coverage as observed *delper
 `Monthly cost breakdown` main state = current month's booked fuel + non-fuel spending. Attributes include:
 
 - `months`: newest 120 monthly aggregates, each with `month`, `fuel`, `other`, `total`, `km`, `odo_coverage`, optional `odo_start_on`/`odo_end_on`, `logged_trip_km`, `trip_count`, `average_trip_km`, `litres`, `fuel_ups`, `fuel_per_logged_km`, `total_per_logged_km` (legacy field names; ODO denominators), `categories`, `estimated_fuel`, `estimated_total`, `estimated_fuel_per_km`, `estimated_total_per_km`, `estimate_coverage` and `estimate_rate_samples`.
-- `years`: newest 40 yearly aggregates with corresponding costs, purchased litres, trip counts, ODO distances, categories and estimated/booked metrics.
+- `years`: newest 40 yearly aggregates with corresponding costs, purchased litres, trip counts, ODO distances, categories and estimated/booked metrics. Each year also exposes `average_reported_consumption`, `reported_consumption_samples`, `average_fuel_price` (booked fuel spend ÷ purchased litres), `fuel_price_samples`, `fuel_price_min`, `fuel_price_max`, `consumption_min` and `consumption_max`.
 - `categories_all`: aggregate since import start, bounded category names/amounts; `lifetime_odometer_km`, `lifetime_odo_coverage`, `estimated_lifetime`, `latest_two_consumption`, `latest_two_consumption_count`, `history_truncated`, `months_limit`.
 
 The top overview shows the current month/year regardless of the historical month selected in the Costs dropdown; the Costs section uses the chosen month. Zero and unavailable metrics must not be conflated. The estimated all-import `TripCost` is a separate legacy value and is **not** actual booked spending.
