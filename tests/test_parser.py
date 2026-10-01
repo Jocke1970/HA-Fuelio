@@ -124,6 +124,17 @@ class FuelioParserTests(unittest.TestCase):
         self.assertEqual(snapshot.fuel_forecast["calibration_full_fillup_date"], "2026-09-10")
         self.assertEqual(snapshot.fuel_forecast["consumption_samples"], 2)
 
+    def test_cost_month_end_overflow_is_clamped_but_trip_dates_stay_strict(self):
+        overflow = sample_csv().replace("2026-09-25 12:00", "2026-09-31 05:00", 1)
+        snapshot = parse_backup(overflow, today=date(2026, 10, 1))
+        september = next(row for row in snapshot.monthly_cost_history if row["month"] == "2026-09")
+        self.assertEqual(september["other"], 700)
+        self.assertEqual(snapshot.other_expenses, 700)
+
+        invalid_trip = sample_csv().replace("2026-09-18 12:00", "2026-09-31 12:00", 1)
+        with self.assertRaisesRegex(ValueError, "Invalid date"):
+            parse_backup(invalid_trip, today=date(2026, 10, 1))
+
     def test_reject_nonmetric(self):
         with self.assertRaisesRegex(ValueError, "metric"):
             parse_backup(sample_csv(metric=False))
