@@ -70,7 +70,8 @@ const ENTITY_SLUGS = Object.freeze({
     .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
     .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
     .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; }
-    button.kpi,button.tile { color:inherit; font:inherit; width:100%; }
+    button.kpi,button.tile { appearance:none; color:inherit; font:inherit; width:100%; }
+    button.tile { background:var(--card-background-color,#fff); }
     .chart-action { cursor:pointer; position:relative; transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease; }
     .chart-action:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
     .chart-action:focus-visible,.category-chart:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:2px; }
@@ -344,6 +345,11 @@ const ENTITY_SLUGS = Object.freeze({
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key || ""))) return "—";
       return new Intl.DateTimeFormat("sv-SE", { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
     }
+    _chartNumber(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
     _chartGrid(maxValue, left, top, plotWidth, plotHeight, unit = "") {
       const scaleMax = Math.max(Number(maxValue) || 0, 1);
       return Array.from({ length:5 }, (_, index) => {
@@ -358,8 +364,8 @@ const ENTITY_SLUGS = Object.freeze({
       const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
       const plotWidth = width - left - right, plotHeight = height - top - bottom;
       const totals = rows.map((row) => stacked
-        ? series.reduce((sum, item) => sum + (Number.isFinite(Number(row[item.key])) ? Number(row[item.key]) : 0), 0)
-        : Math.max(...series.map((item) => Number.isFinite(Number(row[item.key])) ? Number(row[item.key]) : 0)));
+        ? series.reduce((sum, item) => sum + (this._chartNumber(row[item.key]) ?? 0), 0)
+        : Math.max(...series.map((item) => this._chartNumber(row[item.key]) ?? 0)));
       const maxValue = Math.max(...totals, 1) * 1.1;
       const step = plotWidth / rows.length;
       const groupWidth = Math.min(step * .68, 62);
@@ -368,8 +374,8 @@ const ENTITY_SLUGS = Object.freeze({
       rows.forEach((row, rowIndex) => {
         let accumulated = 0;
         series.forEach((item, seriesIndex) => {
-          const value = Number(row[item.key]);
-          if (!Number.isFinite(value) || value < 0) return;
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) return;
           const h = value / maxValue * plotHeight;
           const x = left + rowIndex * step + (step - groupWidth) / 2 + (stacked ? 0 : seriesIndex * barWidth);
           const y = stacked ? top + plotHeight - (accumulated + value) / maxValue * plotHeight : top + plotHeight - h;
@@ -385,7 +391,7 @@ const ENTITY_SLUGS = Object.freeze({
       if (!rows.length) return `<div class="chart-empty">Ingen månadsdata för valt år.</div>`;
       const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
       const plotWidth = width - left - right, plotHeight = height - top - bottom;
-      const values = rows.flatMap((row) => series.map((item) => Number(row[item.key])).filter(Number.isFinite));
+      const values = rows.flatMap((row) => series.map((item) => this._chartNumber(row[item.key])).filter((value) => value !== null));
       const maxValue = Math.max(...values, 1) * 1.1;
       const step = rows.length > 1 ? plotWidth / (rows.length - 1) : plotWidth;
       let shapes = "";
@@ -396,8 +402,8 @@ const ENTITY_SLUGS = Object.freeze({
           segment = [];
         };
         rows.forEach((row, rowIndex) => {
-          const value = Number(row[item.key]);
-          if (!Number.isFinite(value) || value < 0) { flush(); return; }
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) { flush(); return; }
           const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
           const y = top + plotHeight - value / maxValue * plotHeight;
           segment.push(`${x},${y}`);
