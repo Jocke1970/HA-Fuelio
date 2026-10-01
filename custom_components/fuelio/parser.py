@@ -596,6 +596,26 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     if lifetime_estimate["estimated_fuel"] is not None:
         lifetime_estimate["estimated_total"] = rounded(Decimal(str(lifetime_estimate["estimated_fuel"])) + expenses)
         lifetime_estimate["estimated_total_per_km"] = per_odometer_km(Decimal(str(lifetime_estimate["estimated_total"])), lifetime_km)
+
+    def annual_fuel_stats(year: str, row: dict) -> dict:
+        year_number = int(year)
+        consumptions = [value for value, day in valid_consumptions if day.year == year_number]
+        prices = [value for value, day in valid_prices if day.year == year_number]
+        average_consumption = (
+            sum(consumptions, Decimal(0)) / len(consumptions) if consumptions else None
+        )
+        average_price = row["fuel"] / row["litres"] if row["litres"] > 0 else None
+        return {
+            "average_reported_consumption": rounded(average_consumption, 3) if average_consumption is not None else None,
+            "reported_consumption_samples": len(consumptions),
+            "average_fuel_price": rounded(average_price, 3) if average_price is not None else None,
+            "fuel_price_samples": len(prices),
+            "fuel_price_min": rounded(min(prices), 3) if prices else None,
+            "fuel_price_max": rounded(max(prices), 3) if prices else None,
+            "consumption_min": rounded(min(consumptions), 3) if consumptions else None,
+            "consumption_max": rounded(max(consumptions), 3) if consumptions else None,
+        }
+
     year_history = tuple(
         {"year": year, "fuel": rounded(row["fuel"]), "other": rounded(row["other"]),
          "total": rounded(row["fuel"] + row["other"]),
@@ -605,7 +625,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
          "average_trip_km": rounded(row["logged_trip_km"] / row["trip_count"], 3) if row["trip_count"] else None,
          "fuel_per_logged_km": per_odometer_km(row["fuel"], row["km"]),
          "total_per_logged_km": per_odometer_km(row["fuel"] + row["other"], row["km"]),
-         "categories": category_rows(row["categories"]), **year_odo_data[year][1], **year_estimates[year]}
+         "categories": category_rows(row["categories"]),
+         **annual_fuel_stats(year, row), **year_odo_data[year][1], **year_estimates[year]}
         for year, row in sorted(year_totals.items(), reverse=True)[:40]
     )
     current = year_totals.get(str(today.year), {"fuel": Decimal(0), "other": Decimal(0),

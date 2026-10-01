@@ -1,3 +1,18 @@
+# HA-Fuelio v0.1.0-beta.12 🚙📊
+
+Annual reporting on top of the beta.11 parser fix.
+
+- Add a full-width **Årsöversikt** section with an independent year selector (up to the existing 40-year bounded history).
+- Annual headline metrics: observed ODO distance, logged trip count, mean logged trip length, purchased litres, fill-up count and average reported L/100 km.
+- Annual cost summary: booked fuel, non-fuel and total spending; booked total SEK/ODO-km; estimated consumed-fuel cost and estimated total SEK/km.
+- Annual fuel/efficiency summary: weighted actual average fuel price (booked fuel spend ÷ purchased litres), yearly min/max positive unit price, yearly min/max reported consumption and number of valid consumption observations.
+- Show **every aggregated expense category for the selected year** (bounded by the existing category privacy/size rules).
+- Enrich the existing `years` attribute objects on `Monthly cost breakdown`; no new entities are created. Sensor count remains **42** and existing unique IDs/entity IDs stay unchanged.
+- Keep the beta.11 cost-only month-end normalization for Fuelio's invalid recurring dates.
+- Frontend version becomes **0.1.0-beta.12**.
+
+Upgrade through HACS, restart Home Assistant, re-copy `/config/custom_components/fuelio/www/ha-fuelio-card.js` to `/config/www/ha-fuelio-card.js`, update the existing Lovelace resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.12`, and hard-refresh.
+
 # HA-Fuelio v0.1.0-beta.11 🚙
 
 Targeted parser fix for Fuelio's recurring month-end cost export bug.
