@@ -54,5 +54,7 @@ assert.match(html, /Rapporterat snitt/);
 assert.match(html, /5,56 L\/100 km/);
 assert.match(html, /21,98 kr\/L/);
 assert.match(html, /Utgifter per kategori · 2026/);
-assert.match(html, /0\.1\.0-beta\.12/);
+assert.match(html, /data-chart="categories"/);
+assert.match(html, /Visa graf/);
+assert.match(html, /0\.1\.0-beta\.13/);
 console.log('PASS: categorized costs, period-specific kr/km and fuel-ups render with mixed entity IDs');
