@@ -1,3 +1,22 @@
+# HA-Fuelio v0.1.0-beta.13 🚙📈
+
+Interactive drill-down charts for the desktop Fuelio dashboard.
+
+- Make selected KPI and annual-report tiles clickable and open an internal modal without leaving the dashboard.
+- Add a self-contained SVG chart engine; no Chart.js, ApexCharts, Browser Mod or other frontend dependency is required.
+- Initial graph set uses existing bounded monthly/yearly aggregate attributes only:
+  - booked fuel + non-fuel costs per month (stacked bars)
+  - observed ODO distance per month
+  - purchased litres per month
+  - booked total SEK/ODO-km versus estimated total SEK/km
+  - annual non-fuel expense categories
+- Annual graphs follow the independent year selector. Current-period KPI graphs use the current calendar year.
+- Native SVG titles provide hover values, with theme-aware HA colors, modal close button, backdrop close and Escape-key close.
+- Missing monthly metrics stay unavailable; they are never silently plotted as zero.
+- Backend data model and sensor count remain unchanged at **42**. Beta.13 is primarily a frontend interaction release on the beta.12/beta.11 backend.
+
+Upgrade through HACS, restart Home Assistant, copy the updated `ha-fuelio-card.js` to `/config/www`, update the existing resource to `/local/ha-fuelio-card.js?v=0.1.0-beta.13`, and hard-refresh.
+
 # HA-Fuelio v0.1.0-beta.12 🚙📊
 
 Annual reporting on top of the beta.11 parser fix.
