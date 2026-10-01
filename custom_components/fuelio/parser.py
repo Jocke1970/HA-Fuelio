@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+from calendar import monthrange
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
@@ -101,6 +102,27 @@ def _date(raw: str) -> date:
         except ValueError:
             pass
     raise ValueError("Invalid date in Fuelio backup")
+
+def _cost_date(raw: str) -> date:
+    """Parse a Fuelio cost date, tolerating its month-end recurrence bug only."""
+    try:
+        return _date(raw)
+    except ValueError as original:
+        token = raw.strip().split(" ", 1)[0]
+        parts = token.split("-")
+        if len(parts) != 3:
+            raise original
+        try:
+            year, month, day = (int(part) for part in parts)
+            last_day = monthrange(year, month)[1]
+        except (ValueError, TypeError):
+            raise original
+        # Fuelio can materialize a recurring expense on day 29-31 even when
+        # that day does not exist in the target month (e.g. 2026-09-31).
+        # Clamp only this narrow month-end case; all other dates stay strict.
+        if 29 <= day <= 31 and day > last_day:
+            return date(year, month, last_day)
+        raise original
 
 
 def _section_rows(text: str) -> dict[str, list[dict[str, str]]]:
@@ -283,7 +305,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     for record in sections["Costs"]:
         if record.get("isTemplate", "0").strip() == "1" or record.get("isIncome", "0").strip() == "1":
             continue
-        day = _date(record["Date"])
+        day = _cost_date(record["Date"])
         amount = _nonnegative(record["Cost"], default=Decimal(0))
         assert amount is not None
         expense_count += 1
