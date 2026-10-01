@@ -1,3 +1,15 @@
+# HA-Fuelio v0.1.0-beta.11 🚙
+
+Targeted parser fix for Fuelio's recurring month-end cost export bug.
+
+- Accept impossible **month-end dates only for cost rows** when Fuelio materializes a recurring expense on day 29-31 in a shorter month, e.g. `2026-09-31`.
+- Clamp only that narrow case to the month's real last day (`2026-09-31 → 2026-09-30`).
+- Keep tanking, trip and all other dates strictly validated; malformed non-month-end dates still fail instead of being silently accepted.
+- This fixes the real backup observed on 2026-10-01 where an ordinary non-template cost row was exported as `2026-09-31 05:00`.
+- No sensor IDs, calculations, card layout or frontend file change. Sensor count remains **42** and HA-Fuelio Card remains **0.1.0-beta.10**.
+
+Upgrade the integration through HACS to beta.11 and restart Home Assistant. No Lovelace resource/cache-bust change is required for this backend-only fix.
+
 # HA-Fuelio v0.1.0-beta.10 🚙
 
 Desktop-first UI refresh built on the validated beta.9 backend.
