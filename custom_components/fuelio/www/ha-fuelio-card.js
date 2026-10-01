@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.12 — annual overview, desktop-first, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.13 — interactive SVG charts, desktop-first, read-only Lovelace card. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.12";
+  const CARD_VERSION = "0.1.0-beta.13";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -70,6 +70,11 @@ const ENTITY_SLUGS = Object.freeze({
     .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
     .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
     .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; }
+    button.kpi,button.tile { color:inherit; font:inherit; width:100%; }
+    .chart-action { cursor:pointer; position:relative; transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease; }
+    .chart-action:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
+    .chart-action:focus-visible,.category-chart:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:2px; }
+    .chart-hint { display:block; margin-top:5px; font-size:.62rem; color:var(--primary-color,#03a9f4); font-weight:750; }
     .overview { display:grid; grid-template-columns:1fr; gap:12px; }
     .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
     .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
@@ -108,6 +113,8 @@ const ENTITY_SLUGS = Object.freeze({
     .small { font-size:.72rem; }
     .foot { text-align:right; margin-top:12px; }
     .category-list { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:3px 11px; }
+    .category-chart { cursor:pointer; transition:border-color .12s ease,box-shadow .12s ease; }
+    .category-chart:hover { border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
     .category-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--divider-color,#e2e4e8); font-size:.79rem; }
     .category-row:last-child { border:0; }
     .category-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -116,6 +123,28 @@ const ENTITY_SLUGS = Object.freeze({
     .annual-block { min-width:0; }
     .annual-hero { margin-bottom:2px; }
     .records-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .chart-backdrop { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:18px; background:#0008; backdrop-filter:blur(4px); }
+    .chart-modal { width:min(1100px,96vw); max-height:92vh; overflow:auto; border:1px solid var(--divider-color,#e2e4e8); border-radius:24px; background:var(--ha-card-background,var(--card-background-color,#fff)); color:var(--primary-text-color,#202124); box-shadow:0 24px 80px #0008; }
+    .chart-head { position:sticky; top:0; z-index:2; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px 14px; border-bottom:1px solid var(--divider-color,#e2e4e8); background:var(--ha-card-background,var(--card-background-color,#fff)); }
+    .chart-head h3 { font-size:1.15rem; margin:0 0 4px; }
+    .chart-close { flex:none; width:38px; height:38px; border:1px solid var(--divider-color,#e2e4e8); border-radius:999px; background:var(--secondary-background-color,#f4f5f7); color:inherit; cursor:pointer; font-size:1.05rem; }
+    .chart-body { padding:16px 18px 8px; }
+    .chart-wrap { width:100%; overflow-x:auto; }
+    .chart-svg { display:block; width:100%; min-width:640px; height:auto; overflow:visible; }
+    .chart-svg text { fill:var(--secondary-text-color,#68727d); font-size:13px; font-family:inherit; }
+    .chart-svg .axis-strong { fill:var(--primary-text-color,#202124); font-weight:750; }
+    .chart-svg .gridline { stroke:var(--divider-color,#dfe3e8); stroke-width:1; }
+    .chart-svg .series-a-fill { fill:var(--primary-color,#03a9f4); }
+    .chart-svg .series-b-fill { fill:var(--accent-color,#ff9800); }
+    .chart-svg .series-a-line { fill:none; stroke:var(--primary-color,#03a9f4); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-svg .series-b-line { fill:none; stroke:var(--accent-color,#ff9800); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-svg .series-a-dot { fill:var(--primary-color,#03a9f4); stroke:var(--card-background-color,#fff); stroke-width:2; }
+    .chart-svg .series-b-dot { fill:var(--accent-color,#ff9800); stroke:var(--card-background-color,#fff); stroke-width:2; }
+    .chart-legend { display:flex; flex-wrap:wrap; gap:12px 20px; padding:2px 4px 12px; color:var(--secondary-text-color,#68727d); font-size:.76rem; }
+    .chart-legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--primary-color,#03a9f4); }
+    .chart-legend span:nth-child(2)::before { background:var(--accent-color,#ff9800); }
+    .chart-note { margin:0 18px 18px; padding:10px 12px; border-radius:12px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); font-size:.74rem; line-height:1.4; }
+    .chart-empty { padding:44px 20px; text-align:center; color:var(--secondary-text-color,#68727d); }
     @container (min-width:720px) {
       .shell { padding:22px; }
       .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
