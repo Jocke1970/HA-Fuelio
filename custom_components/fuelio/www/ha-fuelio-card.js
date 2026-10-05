@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.13 — interactive SVG charts, desktop-first, read-only Lovelace card. */
+/* HA-Fuelio Card 0.1.0-beta.14 — service & maintenance aggregates, interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.13";
+  const CARD_VERSION = "0.1.0-beta.14";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -320,6 +320,15 @@ const ENTITY_SLUGS = Object.freeze({
       if (!Array.isArray(rows)) return [];
       return rows.filter((row) => row && /^\d{4}$/.test(String(row.year)) &&
         ["fuel", "other", "total"].every((key) => Number.isFinite(row[key]))).slice(0, 40);
+    }
+    _maintenanceTotal(categories) {
+      if (!Array.isArray(categories)) return 0;
+      return categories.reduce((sum, item) => {
+        const name = String(item?.name || "").trim().toLocaleLowerCase("sv-SE");
+        const amount = Number(item?.amount);
+        const maintenance = name.includes("underhåll") || name.includes("service") || name.includes("reparation");
+        return maintenance && Number.isFinite(amount) ? sum + amount : sum;
+      }, 0);
     }
     _chartAttrs(chart, year) {
       if (!chart) return "";
@@ -663,7 +672,14 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._recordTile("consumption_min_all", "Lägsta totalt", "L/100 km")}
         ${this._recordTile("consumption_max_all", "Högsta totalt", "L/100 km")}
       </div><div class="notice">Rekorden bygger på registrerade tankningar med giltiga positiva värden. Datumet visas under varje rekord. Saknade värden visas som —. Ett rekord per tankning är inte samma sak som ett vägt livstidssnitt.</div>`;
-      const service = `<div class="notice">Serviceintervall och betalningspåminnelser finns ännu inte i HA-Fuelios datamodell. Tank- och räckviddsprognosen visas i översikten och under Bränsle.</div>`;
+      const serviceMonth = this._maintenanceTotal(selected?.categories);
+      const serviceYear = this._maintenanceTotal(annualYear?.categories);
+      const serviceAll = this._maintenanceTotal(aggregate.categories_all);
+      const service = `<div class="grid">
+        ${this._tile("🧰", `Underhåll · ${selected ? monthName(selected.month) : "vald månad"}`, kroner(serviceMonth), "Fuelio-kategorier: Underhåll / Service / Reparation")}
+        ${this._tile("🗓️", `Underhåll · år ${this._year || "—"}`, kroner(serviceYear), "Valt år i Årsöversikten")}
+        ${this._tile("🔧", "Underhåll · sedan importstart", kroner(serviceAll), "Summerat från Fuelios kategorier")}
+      </div><div class="notice">Beloppen hämtas från Fuelios bokförda kostnadskategorier med namn som innehåller Underhåll, Service eller Reparation. Serviceintervall och framtida underhållspåminnelser finns ännu inte i datamodellen.</div>`;
       const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste ZIP-uppdatering</span><strong>${esc(syncText)}</strong></div><div class="summary"><span>Resurs</span><strong>/local/ha-fuelio-card.js</strong></div><div class="notice">ZIP-tiden är filens modifieringstid. I din rclone-kedja bevaras Drive-filens tid när ZIP:en kopieras till Home Assistant.</div>`;
       this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">
         <div class="header">
