@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 0.1.0-beta.14 — service & maintenance aggregates, interactive SVG charts. */
+/* HA-Fuelio Card 2026.10.0b14 — service & maintenance aggregates, interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "0.1.0-beta.14";
+  const CARD_VERSION = "2026.10.0b14";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
