@@ -1,4 +1,4 @@
-# HA-Fuelio v0.1.0-beta.14 🔧
+# HA-Fuelio 2026.10.0b14 🔧
 
 Service & maintenance cost visibility fix.
 
@@ -10,9 +10,9 @@ Service & maintenance cost visibility fix.
 - Match Fuelio category names containing **Underhåll**, **Service** or **Reparation**; unrelated categories such as `Tjänster` are not included.
 - Existing booked cost totals are unchanged; this release fixes presentation/visibility only.
 - No new sensors or unique-ID/entity-ID changes. Sensor count remains **42**.
-- Frontend version becomes **0.1.0-beta.14**.
+- Frontend version becomes **2026.10.0b14**.
 
-Update the beta through HACS and restart Home Assistant. The Lovelace resource cache-bust should use `/local/ha-fuelio-card.js?v=0.1.0-beta.14` after the updated card file is in `/config/www`.
+Update the beta through HACS and restart Home Assistant. The Lovelace resource cache-bust should use `/local/ha-fuelio-card.js?v=2026.10.0b14` after the updated card file is in `/config/www`.
 
 # HA-Fuelio v0.1.0-beta.13 🚙📈
 
