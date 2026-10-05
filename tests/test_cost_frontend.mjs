@@ -64,5 +64,5 @@ assert.match(serviceHtml, /Underhåll · september 2026/);
 assert.match(serviceHtml, /34,90 kr/);
 assert.match(serviceHtml, /Underhåll · år 2026/);
 assert.match(serviceHtml, /Underhåll · sedan importstart/);
-assert.match(serviceHtml, /2026\\.10\\.0b14/);
+assert.match(serviceHtml, /2026\.10\.0b14/);
 console.log('PASS: categorized costs, period-specific kr\/km, fuel-ups and maintenance render with mixed entity IDs');
