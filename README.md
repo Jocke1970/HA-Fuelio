@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.10.0b14`**. Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
+Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.10.0b15`**. Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
 
-## Features and data contract (2026.10.0b14)
+## Features and data contract (2026.10.0b15)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
@@ -12,7 +12,7 @@ Read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Lates
 - Eight fuel records: lowest/highest positive recorded unit prices and individually reported L/100 km, for the current calendar year and imported history, with `recorded_on` attributes. A missing report remains unknown; the latest-two-reading average is an explicitly separate estimate.
 - Clickable KPI/annual tiles open self-contained SVG chart modals for monthly booked costs, ODO distance, purchased litres, booked-vs-estimated cost/km and annual expense-category distribution. Graphs use the same bounded aggregate attributes already exposed by the integration; missing values are not converted to zero.
 - **Service & underhåll** surfaces existing booked Fuelio categories matching Underhåll, Service or Reparation for the selected month, selected annual-report year and import lifetime. This is presentation of already-counted costs, not a separate accounting model.
-- Desktop-first beta.13 visual layout with an independent annual-report selector and internal SVG drill-down charts; Standalone read-only Lovelace card at `custom_components/fuelio/www/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
+- Desktop-first dashboard with an independent annual-report selector and internal SVG drill-down charts. The bundled read-only Lovelace card is served directly by the integration at `/fuelio/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
 
 ### Distances and cost definitions
 
@@ -30,18 +30,11 @@ For detailed fields see [analytics schema](docs/analytics-schema.md), [ODO algor
 
 ## Install or upgrade
 
-1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest *published* prerelease. Avoid the broken beta.1 tag. Update `2026.10.0b14` through HACS and restart Home Assistant.
+1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest *published* prerelease. Avoid the broken beta.1 tag. Update `2026.10.0b15` through HACS and restart Home Assistant.
 2. Keep your private ZIP at `fuelio/vehicle-1-sync.csv.zip` relative to the actual HA configuration root. Examples: `/config/fuelio/vehicle-1-sync.csv.zip` or `/homeassistant/fuelio/vehicle-1-sync.csv.zip`; **not** a nested `config/config` directory. Do not put the ZIP in GitHub or paste its private records into logs/issues.
 3. **Do not remove/re-add the config entry or rename existing entities.** The old and new entity-ID prefixes can coexist; the card maps sensors through the HA entity/device registry.
-4. Reinstall the frontend file after each integration upgrade:
-
-```bash
-mkdir -p /config/www && \
-cp -f /config/custom_components/fuelio/www/ha-fuelio-card.js /config/www/ha-fuelio-card.js && \
-ls -lh /config/www/ha-fuelio-card.js
-```
-
-5. Under dashboard **Resources**, update the **existing single** JavaScript-module entry to `/local/ha-fuelio-card.js?v=2026.10.0b14` (do not add a duplicate), then hard-refresh the browser. If `/config/www` was just created, restart HA to expose `/local`.
+4. **One-time migration for installations from b14 or older:** under dashboard **Resources**, replace the existing Fuelio JavaScript-module URL with `/fuelio/ha-fuelio-card.js`. Do not add a duplicate resource. After this migration, future Fuelio beta updates require no `/config/www` copy and no cache-bust query string.
+5. Update future betas through HACS and restart/reload Home Assistant as required. The integration serves the card directly from its installed HACS files with cache headers disabled.
 6. Manual Lovelace card YAML for the existing tested installation:
 
 ```yaml
@@ -51,6 +44,8 @@ title: Fuelio · Bilöversikt
 ```
 
 Use your **actual** monthly-breakdown entity ID on other installations; do not assume it starts with `sensor.mmk912_`. The card does not call HA services or make remote requests. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
+
+After `/fuelio/ha-fuelio-card.js` has been verified, the old manual copy `/config/www/ha-fuelio-card.js` may be deleted. It is no longer part of the supported update path.
 
 ## Privacy and limitations
 
