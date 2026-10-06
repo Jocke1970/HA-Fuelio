@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.10.0b14 — service & maintenance aggregates, interactive SVG charts. */
+/* HA-Fuelio Card 2026.10.0b15 — service & maintenance aggregates, interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.10.0b14";
+  const CARD_VERSION = "2026.10.0b15";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -680,7 +680,7 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("🗓️", `Underhåll · år ${this._year || "—"}`, kroner(serviceYear), "Valt år i Årsöversikten")}
         ${this._tile("🔧", "Underhåll · sedan importstart", kroner(serviceAll), "Summerat från Fuelios kategorier")}
       </div><div class="notice">Beloppen hämtas från Fuelios bokförda kostnadskategorier med namn som innehåller Underhåll, Service eller Reparation. Serviceintervall och framtida underhållspåminnelser finns ännu inte i datamodellen.</div>`;
-      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste ZIP-uppdatering</span><strong>${esc(syncText)}</strong></div><div class="summary"><span>Resurs</span><strong>/local/ha-fuelio-card.js</strong></div><div class="notice">ZIP-tiden är filens modifieringstid. I din rclone-kedja bevaras Drive-filens tid när ZIP:en kopieras till Home Assistant.</div>`;
+      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste ZIP-uppdatering</span><strong>${esc(syncText)}</strong></div><div class="summary"><span>Resurs</span><strong>/fuelio/ha-fuelio-card.js</strong></div><div class="notice">ZIP-tiden är filens modifieringstid. I din rclone-kedja bevaras Drive-filens tid när ZIP:en kopieras till Home Assistant.</div>`;
       this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">
         <div class="header">
           <div class="title-wrap"><h2>🚙 ${esc(title)}</h2><span class="muted">Desktop dashboard · Fuelio read-only</span></div>

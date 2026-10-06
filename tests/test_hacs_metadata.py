@@ -24,6 +24,12 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertTrue(manifest.get("config_flow"))
         self.assertIn("version", manifest)
         self.assertTrue(manifest.get("issue_tracker"))
+        card = component / "www" / "ha-fuelio-card.js"
+        self.assertTrue(card.is_file(), "HACS release must bundle the Lovelace card")
+        init_text = (component / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn('FRONTEND_URL = "/fuelio/ha-fuelio-card.js"', init_text)
+        self.assertIn("async_register_static_paths", init_text)
+        self.assertIn("cache_headers=False", init_text)
 
 
 if __name__ == "__main__":

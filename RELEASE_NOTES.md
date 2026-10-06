@@ -1,3 +1,15 @@
+# HA-Fuelio 2026.10.0b15 🧹
+
+Permanent HACS-managed frontend delivery.
+
+- Serve the bundled Lovelace card directly from the integration at `/fuelio/ha-fuelio-card.js` using Home Assistant's async static-path API with cache headers disabled.
+- Remove the need to manually copy `ha-fuelio-card.js` into `/config/www` after every beta.
+- Remove the need to bump a `?v=...` query string for every beta.
+- One-time migration: replace the existing Lovelace resource URL with `/fuelio/ha-fuelio-card.js` (JavaScript module), then future beta updates are HACS-only.
+- The legacy `/config/www/ha-fuelio-card.js` can be deleted after the resource has been switched and verified.
+- Do not auto-load the card with `add_extra_js_url`; keep it as a normal Lovelace resource to avoid frontend custom-element load-order races in panel views.
+- Sensor model remains unchanged at **42 entities**. The Service & underhåll fix from b14 is retained.
+
 # HA-Fuelio 2026.10.0b14 🔧
 
 Service & maintenance cost visibility fix.
