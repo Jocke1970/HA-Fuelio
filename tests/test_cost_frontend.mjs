@@ -18,13 +18,13 @@ add('sensor.mmk912_last_fuel_price', 'last_fuel_price', 20);
 add('sensor.mmk912_fuel_ups', 'fuel_count', 3);
 add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_cost_breakdown', 1200, {
   months: [{ month: '2026-09', fuel: 1000, other: 200, total: 1200, km: 100, litres: 47.5, odo_coverage: 'partial_start', odo_start_on: '2026-09-05', odo_end_on: '2026-09-20', fuel_ups: 1,
-    fuel_per_logged_km: 10, total_per_logged_km: 12, estimated_fuel: 70, estimated_total: 270, estimated_total_per_km: 2.7, estimate_coverage: 'one_consumption_value', trip_count: 2, average_trip_km: 15, categories: [{ name: 'Parkering', amount: 200 }] }],
+    fuel_per_logged_km: 10, total_per_logged_km: 12, estimated_fuel: 70, estimated_total: 270, estimated_total_per_km: 2.7, estimate_coverage: 'one_consumption_value', trip_count: 2, average_trip_km: 15, categories: [{ name: 'Parkering', amount: 200 }, { name: 'Underhåll', amount: 34.9 }] }],
   years: [{ year: '2026', fuel: 2000, other: 200, total: 2200, km: 200, fuel_ups: 2,
     fuel_per_logged_km: 10, total_per_logged_km: 11, estimated_fuel: 150, estimated_total: 350, estimated_total_per_km: 1.75,
     litres: 91, trip_count: 5, average_trip_km: 18.2, average_reported_consumption: 5.56, reported_consumption_samples: 2,
     average_fuel_price: 21.978, fuel_price_min: 19.54, fuel_price_max: 22.64, consumption_min: 5.32, consumption_max: 5.8,
-    categories: [{ name: 'Parkering', amount: 200 }] }],
-  categories_all: [{ name: 'Parkering', amount: 200 }], estimated_lifetime: { estimated_fuel: 150, estimated_total: 350 }, lifetime_odometer_km: 205, latest_two_consumption: 5.55, latest_two_consumption_count: 2
+    categories: [{ name: 'Parkering', amount: 200 }, { name: 'Underhåll', amount: 34.9 }] }],
+  categories_all: [{ name: 'Parkering', amount: 200 }, { name: 'Underhåll', amount: 34.9 }], estimated_lifetime: { estimated_fuel: 150, estimated_total: 350 }, lifetime_odometer_km: 205, latest_two_consumption: 5.55, latest_two_consumption_count: 2
 });
 add('sensor.externa_sensorer_fuelio_vehicle_fuel_cost_per_logged_km_since_import_start', 'fuel_cost_per_km_all', 9);
 add('sensor.externa_sensorer_fuelio_vehicle_total_cost_per_logged_km_since_import_start', 'total_cost_per_km_all', 12);
@@ -56,5 +56,13 @@ assert.match(html, /21,98 kr\/L/);
 assert.match(html, /Utgifter per kategori · 2026/);
 assert.match(html, /data-chart="categories"/);
 assert.match(html, /Visa graf/);
-assert.match(html, /0\.1\.0-beta\.13/);
-console.log('PASS: categorized costs, period-specific kr/km and fuel-ups render with mixed entity IDs');
+card._open.service = true;
+card._render();
+const serviceHtml = card.shadowRoot.innerHTML;
+assert.match(serviceHtml, /Service &amp; underhåll/);
+assert.match(serviceHtml, /Underhåll · september 2026/);
+assert.match(serviceHtml, /34,90 kr/);
+assert.match(serviceHtml, /Underhåll · år 2026/);
+assert.match(serviceHtml, /Underhåll · sedan importstart/);
+assert.match(serviceHtml, /2026\.10\.0b14/);
+console.log('PASS: categorized costs, period-specific kr\/km, fuel-ups and maintenance render with mixed entity IDs');

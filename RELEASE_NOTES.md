@@ -1,3 +1,19 @@
+# HA-Fuelio 2026.10.0b14 🔧
+
+Service & maintenance cost visibility fix.
+
+- Replace the placeholder-only **Service & underhåll** section with real cost summaries from existing Fuelio category aggregates.
+- Show maintenance/service/repair costs for:
+  - the month selected in **Kostnader**
+  - the year selected in **Årsöversikt**
+  - the full imported period
+- Match Fuelio category names containing **Underhåll**, **Service** or **Reparation**; unrelated categories such as `Tjänster` are not included.
+- Existing booked cost totals are unchanged; this release fixes presentation/visibility only.
+- No new sensors or unique-ID/entity-ID changes. Sensor count remains **42**.
+- Frontend version becomes **2026.10.0b14**.
+
+Update the beta through HACS and restart Home Assistant. The Lovelace resource cache-bust should use `/local/ha-fuelio-card.js?v=2026.10.0b14` after the updated card file is in `/config/www`.
+
 # HA-Fuelio v0.1.0-beta.13 🚙📈
 
 Interactive drill-down charts for the desktop Fuelio dashboard.

@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           version="$(python -c 'import json; print(json.load(open("custom_components/fuelio/manifest.json"))["version"])')"
-          if [[ ! "$version" =~ ^0\.1\.0-beta\.[0-9]+$ ]]; then
+          if [[ ! "$version" =~ ^[0-9]{4}\.(0[1-9]|1[0-2])\.0b[0-9]+$ ]]; then
             echo "Skipping release: manifest version is $version"
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             exit 0
@@ -37,8 +37,8 @@ jobs:
           assert isinstance(hacs, dict) and hacs.get('name') == 'Fuelio', 'Invalid HACS metadata'
           assert manifest['domain'] == 'fuelio', 'Invalid integration manifest'
           PY
-          if ! grep -Fq "v${version}" RELEASE_NOTES.md; then
-            echo "Skipping release: release notes do not describe v${version}"
+          if ! grep -Fq "${version}" RELEASE_NOTES.md; then
+            echo "Skipping release: release notes do not describe ${version}"
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -51,7 +51,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
-          tag="v${RELEASE_VERSION}"
+          tag="${RELEASE_VERSION}"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; not overwriting."
             exit 0
