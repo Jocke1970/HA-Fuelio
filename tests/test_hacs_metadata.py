@@ -30,6 +30,9 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertIn('FRONTEND_URL = "/fuelio/ha-fuelio-card.js"', init_text)
         self.assertIn("async_register_static_paths", init_text)
         self.assertIn("cache_headers=False", init_text)
+        services = (component / "services.yaml").read_text(encoding="utf-8")
+        self.assertIn("calibrate_range:", services)
+        self.assertIn("clear_range_calibration:", services)
 
 
 if __name__ == "__main__":
