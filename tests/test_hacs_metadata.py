@@ -30,6 +30,9 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertIn('FRONTEND_URL = "/fuelio/ha-fuelio-card.js"', init_text)
         self.assertIn("async_register_static_paths", init_text)
         self.assertIn("cache_headers=False", init_text)
+        self.assertIn("async def async_setup(hass: HomeAssistant, config: dict)", init_text)
+        setup_entry_tail = init_text.split("async def async_setup_entry", 1)[1]
+        self.assertNotIn("await _async_register_services(hass)", setup_entry_tail)
         services = (component / "services.yaml").read_text(encoding="utf-8")
         self.assertIn("calibrate_range:", services)
         self.assertIn("clear_range_calibration:", services)
