@@ -73,9 +73,34 @@ class FuelioCoordinator(DataUpdateCoordinator[FuelioSnapshot]):
         if calibration is None:
             return snapshot
 
-        current_fillups = snapshot.fuel_forecast.get("primary_fillup_count")
-        anchor_fillups = calibration.get("anchor_primary_fillup_count")
-        if current_fillups != anchor_fillups:
+        current_marker = snapshot.fuel_forecast.get("latest_primary_fillup_marker")
+        anchor_marker = calibration.get("anchor_primary_fillup_marker")
+
+        # b16 stored only the total primary-fill count. That could falsely reset
+        # a calibration when a reload caught up with older/historical source
+        # changes. Migrate legacy state to the stable latest-fill marker unless
+        # the source clearly contains a fill-up after the calibration date.
+        if anchor_marker is None:
+            calibrated_at = dt_util.parse_datetime(str(calibration.get("calibrated_at", "")))
+            calibration_day = calibrated_at.date() if calibrated_at is not None else None
+            if (
+                calibration_day is not None
+                and snapshot.last_fillup_date is not None
+                and snapshot.last_fillup_date > calibration_day
+            ):
+                _LOGGER.info("Clearing legacy Fuelio range calibration after a newer fill-up")
+                self._calibration = None
+                await self._calibration_store.async_remove()
+                return snapshot
+            calibration["anchor_primary_fillup_marker"] = current_marker
+            calibration["anchor_primary_fillup_count"] = snapshot.fuel_forecast.get(
+                "primary_fillup_count"
+            )
+            self._calibration = calibration
+            await self._calibration_store.async_save(calibration)
+            anchor_marker = current_marker
+
+        if current_marker != anchor_marker:
             _LOGGER.info("Clearing Fuelio range calibration after a new primary-tank fill-up")
             self._calibration = None
             await self._calibration_store.async_remove()
@@ -101,13 +126,20 @@ class FuelioCoordinator(DataUpdateCoordinator[FuelioSnapshot]):
         if base is None:
             raise ValueError("Fuelio data is not available")
         primary_fillups = base.fuel_forecast.get("primary_fillup_count")
-        if not isinstance(primary_fillups, int) or primary_fillups < 1:
+        primary_marker = base.fuel_forecast.get("latest_primary_fillup_marker")
+        if (
+            not isinstance(primary_fillups, int)
+            or primary_fillups < 1
+            or not isinstance(primary_marker, str)
+            or not primary_marker
+        ):
             raise ValueError("A primary-tank fill-up is required before calibration")
 
         consumption = range_calibration_consumption(base, target_range_km)
         calibrated_at = dt_util.now().isoformat()
         self._calibration = {
             "anchor_primary_fillup_count": primary_fillups,
+            "anchor_primary_fillup_marker": primary_marker,
             "consumption_l_per_100km": consumption,
             "target_range_km": round(float(target_range_km), 1),
             "calibrated_at": calibrated_at,
