@@ -76,6 +76,83 @@ class FuelioSnapshot:
     fuel_forecast: dict
 
 
+def range_calibration_consumption(snapshot: FuelioSnapshot, target_range_km: float) -> float:
+    """Return the temporary L/100 km basis required to match a dashboard range."""
+    target = Decimal(str(target_range_km))
+    if not target.is_finite() or target <= 0:
+        raise ValueError("Calibration range must be greater than zero")
+    meta = snapshot.fuel_forecast
+    available_raw = meta.get("fuel_available_since_calibration_l")
+    distance_raw = meta.get("distance_since_calibration_km")
+    if available_raw is None or distance_raw is None:
+        raise ValueError("Fuel range forecast is not calibrated from a full tank")
+    available = Decimal(str(available_raw))
+    distance = Decimal(str(distance_raw))
+    if available <= 0 or distance < 0:
+        raise ValueError("Fuel range calibration basis is unavailable")
+    consumption = available * 100 / (distance + target)
+    if consumption <= 0 or consumption > 100:
+        raise ValueError("Calibration would produce an invalid consumption value")
+    return round(float(consumption), 4)
+
+
+def apply_range_calibration(
+    snapshot: FuelioSnapshot,
+    consumption_l_per_100km: float,
+    *,
+    target_range_km: float | None = None,
+    calibrated_at: str | None = None,
+    today: date | None = None,
+) -> FuelioSnapshot:
+    """Apply a persisted current-tank calibration without changing Fuelio source data."""
+    today = today or date.today()
+    meta = dict(snapshot.fuel_forecast)
+    available_raw = meta.get("fuel_available_since_calibration_l")
+    distance_raw = meta.get("distance_since_calibration_km")
+    capacity_raw = meta.get("tank_capacity_l")
+    if available_raw is None or distance_raw is None or capacity_raw is None:
+        raise ValueError("Fuel range calibration basis is unavailable")
+    available = Decimal(str(available_raw))
+    distance = Decimal(str(distance_raw))
+    capacity = Decimal(str(capacity_raw))
+    consumption = Decimal(str(consumption_l_per_100km))
+    if consumption <= 0 or consumption > 100 or available <= 0 or distance < 0 or capacity <= 0:
+        raise ValueError("Fuel range calibration values are invalid")
+
+    raw_remaining = available - distance * consumption / 100
+    remaining = min(capacity, max(Decimal(0), raw_remaining))
+    remaining_range = remaining / consumption * 100
+
+    average_daily_raw = meta.get("average_daily_distance_30d_km")
+    average_daily = Decimal(str(average_daily_raw)) if average_daily_raw is not None else Decimal(0)
+    days: int | None = None
+    next_date: date | None = None
+    if average_daily > 0:
+        days = ceil(float(remaining_range / average_daily))
+        next_date = today + timedelta(days=days)
+
+    automatic_basis = meta.get("automatic_consumption_basis_l_per_100km")
+    if automatic_basis is None:
+        automatic_basis = meta.get("consumption_basis_l_per_100km")
+    meta.update({
+        "confidence": "manual",
+        "automatic_consumption_basis_l_per_100km": automatic_basis,
+        "consumption_basis_l_per_100km": round(float(consumption), 4),
+        "consumption_basis_source": "manual_range_calibration",
+        "manual_calibration_active": True,
+        "manual_calibrated_target_range_km": round(float(target_range_km), 1) if target_range_km is not None else None,
+        "manual_calibrated_at": calibrated_at,
+    })
+    return replace(
+        snapshot,
+        estimated_fuel_remaining_l=round(float(remaining), 2),
+        estimated_range_remaining_km=round(float(remaining_range), 1),
+        estimated_days_to_next_fillup=days,
+        estimated_next_fillup_date=next_date,
+        fuel_forecast=meta,
+    )
+
+
 def _number(raw: str, *, default: Decimal | None = None) -> Decimal | None:
     if not raw.strip():
         return default
@@ -475,6 +552,11 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         "average_daily_distance_30d_km": None,
         "daily_distance_window_days": 0,
         "prediction_basis": "theoretical_empty_tank",
+        "primary_fillup_count": sum(1 for event in fuel_events if event["tank"] == "1"),
+        "distance_since_calibration_km": None,
+        "fuel_available_since_calibration_l": None,
+        "consumption_basis_source": "fuelio_latest_two",
+        "manual_calibration_active": False,
     }
     full_indexes = [index for index, event in enumerate(primary_events) if event["full"]]
     if (
@@ -512,6 +594,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
                 "confidence": "normal" if len(latest_values) >= 2 and calibration_age <= 90 else "limited",
                 "calibration_full_fillup_date": calibration["day"].isoformat(),
                 "partial_fillups_since_calibration": len(later),
+                "distance_since_calibration_km": rounded(latest_odometer_value - calibration_odo, 3),
+                "fuel_available_since_calibration_l": rounded(tank_capacity + added_litres, 3),
                 "average_daily_distance_30d_km": rounded(average_daily, 3),
                 "daily_distance_window_days": coverage_days,
             })
