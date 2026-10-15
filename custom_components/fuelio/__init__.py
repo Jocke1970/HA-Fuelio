@@ -227,6 +227,12 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     domain_data[SERVICES_REGISTERED] = True
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up integration-global resources and services."""
+    await _async_register_services(hass)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a configured Fuelio backup."""
     await _async_register_frontend(hass)
@@ -234,7 +240,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_initialize()
     await coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
-    await _async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
