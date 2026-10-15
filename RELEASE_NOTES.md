@@ -1,3 +1,15 @@
+# HA-Fuelio 2026.10.0b17 🛠️
+
+Range-calibration persistence and setup robustness.
+
+- Replace the b16 calibration reset anchor based on **primary fill-up count** with an opaque marker for the **latest actual primary-tank fill-up**.
+- Historical/backfilled Fuelio tank records no longer look like a new tanking and therefore no longer clear an active calibration.
+- A genuinely new latest primary-tank fill-up still clears the manual range calibration automatically.
+- Migrate existing b16 calibration state without forcing a reset when no newer fill-up occurred after calibration.
+- Move Fuelio service registration from per-config-entry setup into integration-global `async_setup`.
+- Keep the current ZIP parser and 42-sensor data model unchanged.
+- Frontend remains HACS-managed at `/fuelio/ha-fuelio-card.js`.
+
 # HA-Fuelio 2026.10.0b16 🎯
 
 Current-tank range calibration.

@@ -47,7 +47,7 @@ def sample_csv(*, metric: bool = True, malformed: bool = False,
     return out.getvalue()
 
 
-def forecast_csv() -> str:
+def forecast_csv(*, extra_log_rows: tuple[tuple[str, ...], ...] = ()) -> str:
     out = StringIO()
     writer = csv.writer(out)
 
@@ -62,7 +62,8 @@ def forecast_csv() -> str:
             ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)",
              "VolumePrice", "l/100km (optional)", "TankNumber"],
             ["2026-09-10 11:00", "1000", "50", "1", "1000", "20", "6", "1"],
-            ["2026-08-01 11:00", "900", "40", "1", "800", "20", "5.8", "1"])
+            ["2026-08-01 11:00", "900", "40", "1", "800", "20", "5.8", "1"],
+            *extra_log_rows)
     section("Costs", ["Date", "Cost", "isTemplate", "isIncome"])
     section("TripLog",
             ["EndDate", "TripDist", "TripDuration", "TripCost", "StartOdo", "EndOdo"],
@@ -125,6 +126,34 @@ class FuelioParserTests(unittest.TestCase):
         self.assertEqual(snapshot.fuel_forecast["confidence"], "normal")
         self.assertEqual(snapshot.fuel_forecast["calibration_full_fillup_date"], "2026-09-10")
         self.assertEqual(snapshot.fuel_forecast["consumption_samples"], 2)
+
+    def test_latest_primary_fillup_marker_ignores_historical_additions_but_changes_on_new_fillup(self):
+        base = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        base_marker = base.fuel_forecast["latest_primary_fillup_marker"]
+        self.assertIsInstance(base_marker, str)
+        self.assertTrue(base_marker)
+
+        historical = parse_backup(
+            forecast_csv(extra_log_rows=(
+                ("2026-07-01 11:00", "800", "35", "1", "700", "20", "5.7", "1"),
+            )),
+            today=date(2026, 9, 21),
+        )
+        self.assertEqual(
+            historical.fuel_forecast["latest_primary_fillup_marker"],
+            base_marker,
+        )
+
+        newer = parse_backup(
+            forecast_csv(extra_log_rows=(
+                ("2026-09-20 11:00", "1035", "20", "0", "400", "20", "", "1"),
+            )),
+            today=date(2026, 9, 21),
+        )
+        self.assertNotEqual(
+            newer.fuel_forecast["latest_primary_fillup_marker"],
+            base_marker,
+        )
 
     def test_manual_range_calibration_matches_dashboard_and_then_counts_down(self):
         snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))

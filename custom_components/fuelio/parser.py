@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 from calendar import monthrange
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
@@ -542,6 +543,16 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     estimated_range_remaining: Decimal | None = None
     estimated_days_to_next_fillup: int | None = None
     estimated_next_fillup_date: date | None = None
+    latest_primary_fillup_marker = None
+    if last_fill_event is not None:
+        marker_payload = "|".join((
+            last_fill_event["day"].isoformat(),
+            str(last_fill_event["odo"]),
+            str(last_fill_event["volume"]),
+            "1" if last_fill_event["full"] else "0",
+        ))
+        latest_primary_fillup_marker = hashlib.sha256(marker_payload.encode("utf-8")).hexdigest()[:16]
+
     forecast_meta: dict = {
         "confidence": "unavailable",
         "consumption_basis_l_per_100km": rounded(latest_two_consumption, 3) if latest_two_consumption is not None else None,
@@ -553,6 +564,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         "daily_distance_window_days": 0,
         "prediction_basis": "theoretical_empty_tank",
         "primary_fillup_count": sum(1 for event in fuel_events if event["tank"] == "1"),
+        "latest_primary_fillup_marker": latest_primary_fillup_marker,
         "distance_since_calibration_km": None,
         "fuel_available_since_calibration_l": None,
         "consumption_basis_source": "fuelio_latest_two",
