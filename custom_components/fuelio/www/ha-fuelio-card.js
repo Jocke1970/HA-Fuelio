@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.10.0b15 — service & maintenance aggregates, interactive SVG charts. */
+/* HA-Fuelio Card 2026.10.0b16 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.10.0b15";
+  const CARD_VERSION = "2026.10.0b16";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -86,6 +86,11 @@ const ENTITY_SLUGS = Object.freeze({
     .overview-row .note { width:100%; text-align:right; font-size:.68rem; color:var(--secondary-text-color,#68727d); }
     .range-panel { display:grid; gap:12px; }
     .range-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .range-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:7px; }
+    .range-calibrate { appearance:none; border:1px solid color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#d4d9df)); border-radius:999px; padding:6px 10px; background:color-mix(in srgb,var(--card-background-color,#fff) 90%,var(--primary-color,#03a9f4) 10%); color:var(--primary-text-color,#202124); font:inherit; font-size:.72rem; font-weight:800; cursor:pointer; }
+    .range-calibrate:hover { border-color:var(--primary-color,#03a9f4); }
+    .range-calibrate:disabled { cursor:not-allowed; opacity:.45; }
+    .range-manual-note { padding:9px 11px; border-radius:12px; background:color-mix(in srgb,var(--card-background-color,#fff) 90%,var(--primary-color,#03a9f4) 10%); color:var(--secondary-text-color,#68727d); font-size:.7rem; line-height:1.4; }
     .range-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .range-stat { min-width:0; padding:11px 12px; border-radius:15px; background:var(--secondary-background-color,#f4f5f7); }
     .range-stat span { display:block; color:var(--secondary-text-color,#68727d); font-size:.69rem; margin-bottom:4px; }
@@ -124,7 +129,7 @@ const ENTITY_SLUGS = Object.freeze({
     .annual-block { min-width:0; }
     .annual-hero { margin-bottom:2px; }
     .records-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
-    .chart-backdrop { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:18px; background:#0008; backdrop-filter:blur(4px); }
+    .chart-backdrop,.calibration-backdrop { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:18px; background:#0008; backdrop-filter:blur(4px); }
     .chart-modal { width:min(1100px,96vw); max-height:92vh; overflow:auto; border:1px solid var(--divider-color,#e2e4e8); border-radius:24px; background:var(--ha-card-background,var(--card-background-color,#fff)); color:var(--primary-text-color,#202124); box-shadow:0 24px 80px #0008; }
     .chart-head { position:sticky; top:0; z-index:2; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px 14px; border-bottom:1px solid var(--divider-color,#e2e4e8); background:var(--ha-card-background,var(--card-background-color,#fff)); }
     .chart-head h3 { font-size:1.15rem; margin:0 0 4px; }
@@ -146,6 +151,17 @@ const ENTITY_SLUGS = Object.freeze({
     .chart-legend span:nth-child(2)::before { background:var(--accent-color,#ff9800); }
     .chart-note { margin:0 18px 18px; padding:10px 12px; border-radius:12px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); font-size:.74rem; line-height:1.4; }
     .chart-empty { padding:44px 20px; text-align:center; color:var(--secondary-text-color,#68727d); }
+    .calibration-modal { width:min(540px,96vw); border:1px solid var(--divider-color,#e2e4e8); border-radius:22px; padding:20px; background:var(--ha-card-background,var(--card-background-color,#fff)); color:var(--primary-text-color,#202124); box-shadow:0 24px 80px #0008; }
+    .calibration-modal h3 { margin:0 0 6px; font-size:1.08rem; }
+    .calibration-modal p { margin:0 0 14px; color:var(--secondary-text-color,#68727d); font-size:.78rem; line-height:1.45; }
+    .calibration-field { display:grid; gap:6px; margin:14px 0; }
+    .calibration-field label { font-size:.76rem; font-weight:800; }
+    .calibration-field input { width:100%; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:11px 12px; background:var(--card-background-color,#fff); color:inherit; font:inherit; font-size:1rem; }
+    .calibration-meta { display:grid; gap:5px; margin:12px 0; padding:10px 12px; border-radius:12px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); font-size:.72rem; }
+    .calibration-error { margin:10px 0; padding:9px 11px; border-radius:10px; background:color-mix(in srgb,var(--error-color,#db4437) 12%,var(--card-background-color,#fff)); color:var(--error-color,#db4437); font-size:.74rem; font-weight:700; }
+    .calibration-buttons { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .calibration-buttons button { appearance:none; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:9px 12px; background:var(--secondary-background-color,#f4f5f7); color:inherit; font:inherit; font-weight:800; cursor:pointer; }
+    .calibration-buttons .primary { border-color:var(--primary-color,#03a9f4); background:var(--primary-color,#03a9f4); color:var(--text-primary-color,#fff); }
     @container (min-width:720px) {
       .shell { padding:22px; }
       .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
@@ -186,8 +202,36 @@ const ENTITY_SLUGS = Object.freeze({
       this._month = null;
       this._year = null;
       this._chart = null;
+      this._rangeDialog = false;
+      this._rangeError = "";
       this._signature = null;
-      this.shadowRoot.addEventListener("click", (event) => {
+      this.shadowRoot.addEventListener("click", async (event) => {
+        const openCalibration = event.target.closest?.("[data-range-calibrate]");
+        if (openCalibration) {
+          this._rangeDialog = true;
+          this._rangeError = "";
+          this._render();
+          return;
+        }
+        const closeCalibration = event.target.closest?.("[data-range-close]");
+        if (closeCalibration || event.target?.classList?.contains?.("calibration-backdrop")) {
+          this._rangeDialog = false;
+          this._rangeError = "";
+          this._render();
+          return;
+        }
+        const clearCalibration = event.target.closest?.("[data-range-clear]");
+        if (clearCalibration) {
+          try {
+            await this._callRangeService("clear_range_calibration");
+            this._rangeDialog = false;
+            this._rangeError = "";
+          } catch (error) {
+            this._rangeError = error?.message || "Kunde inte återställa kalibreringen.";
+          }
+          this._render();
+          return;
+        }
         const close = event.target.closest?.("[data-chart-close]");
         const isClose = close?.dataset && Object.prototype.hasOwnProperty.call(close.dataset, "chartClose");
         if (isClose || event.target?.classList?.contains?.("chart-backdrop")) {
@@ -212,6 +256,12 @@ const ENTITY_SLUGS = Object.freeze({
         this._render();
       });
       this.shadowRoot.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && this._rangeDialog) {
+          this._rangeDialog = false;
+          this._rangeError = "";
+          this._render();
+          return;
+        }
         if (event.key === "Escape" && this._chart) {
           this._chart = null;
           this._render();
@@ -243,6 +293,25 @@ const ENTITY_SLUGS = Object.freeze({
             this._render();
           }
         }
+      });
+      this.shadowRoot.addEventListener("submit", async (event) => {
+        if (event.target?.id !== "fuelio-range-calibration-form") return;
+        event.preventDefault();
+        const input = event.target.querySelector?.("#fuelio-range-km");
+        const rangeKm = Number(input?.value);
+        if (!Number.isFinite(rangeKm) || rangeKm <= 0 || rangeKm > 5000) {
+          this._rangeError = "Ange en räckvidd mellan 1 och 5 000 km.";
+          this._render();
+          return;
+        }
+        try {
+          await this._callRangeService("calibrate_range", { range_km: rangeKm });
+          this._rangeDialog = false;
+          this._rangeError = "";
+        } catch (error) {
+          this._rangeError = error?.message || "Kalibreringen misslyckades.";
+        }
+        this._render();
       });
     }
 
@@ -477,13 +546,63 @@ const ENTITY_SLUGS = Object.freeze({
       return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
     }
+    _rangeServiceEntity() {
+      return this._resolveId("estimated_range_remaining_km") || this._config?.entity || null;
+    }
+    async _callRangeService(service, data = {}) {
+      const entityId = this._rangeServiceEntity();
+      if (!entityId || !this._hass?.callService) throw new Error("Fuelio-entiteten är inte tillgänglig.");
+      await this._hass.callService("fuelio", service, { entity_id: entityId, ...data });
+    }
+    _rangeCalibrationModal(forecast) {
+      if (!this._rangeDialog) return "";
+      const current = this._value("estimated_range_remaining_km");
+      const manual = forecast?.manual_calibration_active === true;
+      const basis = Number(forecast?.consumption_basis_l_per_100km);
+      const automatic = Number(forecast?.automatic_consumption_basis_l_per_100km);
+      const inputValue = Number.isFinite(current) ? Math.max(1, Math.round(current)) : "";
+      return `<div class="calibration-backdrop">
+        <form id="fuelio-range-calibration-form" class="calibration-modal">
+          <h3>🎯 Kalibrera teoretisk räckvidd</h3>
+          <p>Ange den återstående räckvidd som bilens färddator visar just nu. HA-Fuelio räknar om förbrukningsunderlaget för den aktuella tanken utan att skriva något tillbaka till Fuelio.</p>
+          <div class="calibration-field">
+            <label for="fuelio-range-km">Bilens räckvidd just nu</label>
+            <input id="fuelio-range-km" name="range_km" type="number" min="1" max="5000" step="1" inputmode="numeric" value="${esc(inputValue)}" required>
+          </div>
+          <div class="calibration-meta">
+            <span>Nuvarande prognos: <strong>${esc(decimal(current, "km"))}</strong></span>
+            <span>Aktuellt förbrukningsunderlag: <strong>${esc(decimal(basis, "L/100 km"))}</strong></span>
+            ${manual && Number.isFinite(automatic) ? `<span>Automatiskt Fuelio-underlag: <strong>${esc(decimal(automatic, "L/100 km"))}</strong></span>` : ""}
+            <span>Kalibreringen släpps automatiskt vid nästa registrerade primärtankning.</span>
+          </div>
+          ${this._rangeError ? `<div class="calibration-error">${esc(this._rangeError)}</div>` : ""}
+          <div class="calibration-buttons">
+            <button type="button" data-range-close>Avbryt</button>
+            ${manual ? `<button type="button" data-range-clear>Återställ automatisk</button>` : ""}
+            <button type="submit" class="primary">Kalibrera</button>
+          </div>
+        </form>
+      </div>`;
+    }
     _rangePanel(forecast) {
       const remaining = this._value("estimated_fuel_remaining_l");
       const capacity = Number(forecast?.tank_capacity_l);
       const percent = Number.isFinite(remaining) && Number.isFinite(capacity) && capacity > 0
         ? Math.max(0, Math.min(100, remaining / capacity * 100)) : null;
+      const manual = forecast?.manual_calibration_active === true;
+      const canCalibrate = Number.isFinite(Number(forecast?.fuel_available_since_calibration_l)) &&
+        Number.isFinite(Number(forecast?.distance_since_calibration_km));
+      const status = manual ? "Manuellt kalibrerad" :
+        forecast?.confidence === "normal" ? "Kalibrerad" :
+        forecast?.confidence === "limited" ? "Begränsat underlag" : "Estimat";
       return `<section class="range-panel">
-        <div class="range-head"><h3>🧭 Tank & räckvidd</h3><span class="pill">${forecast?.confidence === "normal" ? "Kalibrerad" : forecast?.confidence === "limited" ? "Begränsat underlag" : "Estimat"}</span></div>
+        <div class="range-head">
+          <h3>🧭 Tank & räckvidd</h3>
+          <div class="range-actions">
+            <span class="pill">${esc(status)}</span>
+            <button type="button" class="range-calibrate" data-range-calibrate ${canCalibrate ? "" : "disabled"}>🎯 Kalibrera</button>
+          </div>
+        </div>
         <div class="range-main">
           <div class="range-stat"><span>Bränsle kvar</span><strong>${esc(decimal(remaining, "L"))}</strong></div>
           <div class="range-stat"><span>Teoretisk räckvidd</span><strong>${esc(decimal(this._value("estimated_range_remaining_km"), "km"))}</strong></div>
@@ -494,6 +613,7 @@ const ENTITY_SLUGS = Object.freeze({
           <div class="fuel-meter"><span style="width:${Number.isFinite(percent) ? percent.toFixed(1) : 0}%"></span></div>
           <div class="fuel-meter-note"><span>${Number.isFinite(percent) ? `Ca ${fmt.format(percent)} % kvar` : "Tanknivå saknas"}</span><span>${Number.isFinite(this._value("estimated_days_to_next_fillup")) ? `${decimal(this._value("estimated_days_to_next_fillup"), "dagar")} kvar` : "Körtempo saknas"}</span></div>
         </div>
+        ${manual ? `<div class="range-manual-note">🎯 Tillfälligt förbrukningsunderlag: <strong>${esc(decimal(Number(forecast?.consumption_basis_l_per_100km), "L/100 km"))}</strong>. Återgår automatiskt till Fuelio vid nästa primärtankning.</div>` : ""}
       </section>`;
     }
     _section(id, icon, title, inner) {
@@ -702,7 +822,7 @@ const ENTITY_SLUGS = Object.freeze({
           ${this._section("version", "ℹ️", "Versionsinformation", version)}
         </div>
         <div class="foot muted">Fuelio · read-only · ${CARD_VERSION}</div>
-      </div></ha-card>${this._chartModal()}`;
+      </div></ha-card>${this._chartModal()}${this._rangeCalibrationModal(forecast)}`;
     }
   }
 
