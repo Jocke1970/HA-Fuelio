@@ -59,6 +59,10 @@ const states = {
   [prefix + "estimated_fuel_remaining"]: state(38.93, {
     confidence: "normal", consumption_basis_l_per_100km: 5.56,
     calibration_full_fillup_date: "2026-09-12", consumption_samples: 2,
+    fuel_available_since_calibration_l: 60, distance_since_calibration_km: 379,
+    primary_fillup_count: 4, manual_calibration_active: false,
+    fuel_available_since_calibration_l: 60, distance_since_calibration_km: 379,
+    primary_fillup_count: 4, manual_calibration_active: false,
   }),
   [prefix + "estimated_range_remaining"]: state(700.1, {
     confidence: "normal", consumption_basis_l_per_100km: 5.56,
@@ -70,7 +74,8 @@ const states = {
   [prefix + "fuel_price_min_year"]: state(13.5, { recorded_on: "2026-03-03" }),
   [prefix + "consumption_min_all"]: state("unknown"),
 };
-card.hass = { states, callService: () => { throw new Error("Card must be read-only"); } };
+const serviceCalls = [];
+card.hass = { states, callService: async (...args) => { serviceCalls.push(args); } };
 assert.match(card.shadowRoot.innerHTML, /&lt;script&gt;invalid&lt;\/script&gt;/);
 assert.doesNotMatch(card.shadowRoot.innerHTML, /<script>invalid<\/script>/);
 assert.match(card.shadowRoot.innerHTML, /1\s?200,00 kr/);
@@ -79,6 +84,18 @@ assert.match(card.shadowRoot.innerHTML, /Tank & räckvidd/);
 assert.match(card.shadowRoot.innerHTML, /700,1 km/);
 assert.match(card.shadowRoot.innerHTML, /38,93 L/);
 assert.match(card.shadowRoot.innerHTML, /2026-10-18/);
+assert.match(card.shadowRoot.innerHTML, /Kalibrera/);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-range-calibrate]" ? { dataset: { rangeCalibrate: "" } } : null } });
+assert.equal(card._rangeDialog, true);
+assert.match(card.shadowRoot.innerHTML, /Kalibrera teoretisk räckvidd/);
+assert.match(card.shadowRoot.innerHTML, /nästa registrerade primärtankning/);
+await card._callRangeService("calibrate_range", { range_km: 650 });
+assert.equal(serviceCalls[0][0], "fuelio");
+assert.equal(serviceCalls[0][1], "calibrate_range");
+assert.equal(serviceCalls[0][2].entity_id, prefix + "estimated_range_remaining");
+assert.equal(serviceCalls[0][2].range_km, 650);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-range-close]" ? { dataset: { rangeClose: "" } } : null } });
+assert.equal(card._rangeDialog, false);
 assert.match(card.shadowRoot.innerHTML, /ZIP uppdaterad/);
 assert.match(card.shadowRoot.innerHTML, /Årsöversikt/);
 assert.match(card.shadowRoot.innerHTML, /Årsrapport · 2026/);
@@ -119,4 +136,4 @@ card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section
 assert.equal(card._open.records, false);
 assert.match(card.shadowRoot.innerHTML, /data-section="records" aria-expanded="false"/);
 assert.doesNotMatch(card.shadowRoot.innerHTML, /<script>invalid<\/script>/);
-console.log("PASS: Fuelio frontend config, escaping, rendering, month selector, accordion and read-only behavior");
+console.log("PASS: Fuelio frontend config, escaping, rendering, calibration modal, month selector and accordion");

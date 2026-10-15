@@ -1,3 +1,17 @@
+# HA-Fuelio 2026.10.0b16 🎯
+
+Current-tank range calibration.
+
+- Add a **Kalibrera** button to **Tank & räckvidd**.
+- Enter the vehicle computer's current remaining range in kilometres; HA-Fuelio derives a temporary L/100 km basis so the theoretical range matches that value at the calibration moment.
+- The calibrated consumption basis then continues to count range down normally as new odometer data arrives; the entered range is not frozen.
+- Persist the override locally in Home Assistant across integration reloads/restarts. Nothing is written back to Fuelio or the source ZIP.
+- Automatically discard the override on the next registered **primary-tank fill-up**, so new Fuelio fuel/distance information becomes authoritative again.
+- Add an explicit **Återställ automatisk** action while manual calibration is active.
+- Forecast attributes expose automatic vs manual consumption basis and calibration state for transparent UI/status.
+- No new entities: sensor count remains **42**.
+- Frontend remains HACS-managed at `/fuelio/ha-fuelio-card.js`.
+
 # HA-Fuelio 2026.10.0b15 🧹
 
 Permanent HACS-managed frontend delivery.
