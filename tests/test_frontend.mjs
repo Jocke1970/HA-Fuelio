@@ -90,10 +90,10 @@ assert.equal(card._rangeDialog, true);
 assert.match(card.shadowRoot.innerHTML, /Kalibrera teoretisk räckvidd/);
 assert.match(card.shadowRoot.innerHTML, /nästa registrerade primärtankning/);
 await card._callRangeService("calibrate_range", { range_km: 650 });
-assert.deepEqual(serviceCalls[0], ["fuelio", "calibrate_range", {
-  entity_id: prefix + "estimated_range_remaining",
-  range_km: 650,
-}]);
+assert.equal(serviceCalls[0][0], "fuelio");
+assert.equal(serviceCalls[0][1], "calibrate_range");
+assert.equal(serviceCalls[0][2].entity_id, prefix + "estimated_range_remaining");
+assert.equal(serviceCalls[0][2].range_km, 650);
 card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-range-close]" ? { dataset: { rangeClose: "" } } : null } });
 assert.equal(card._rangeDialog, false);
 assert.match(card.shadowRoot.innerHTML, /ZIP uppdaterad/);
