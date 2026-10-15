@@ -18,6 +18,8 @@ parser = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = parser
 spec.loader.exec_module(parser)
 load_snapshot, parse_backup = parser.load_snapshot, parser.parse_backup
+apply_range_calibration = parser.apply_range_calibration
+range_calibration_consumption = parser.range_calibration_consumption
 
 
 def sample_csv(*, metric: bool = True, malformed: bool = False,
@@ -123,6 +125,43 @@ class FuelioParserTests(unittest.TestCase):
         self.assertEqual(snapshot.fuel_forecast["confidence"], "normal")
         self.assertEqual(snapshot.fuel_forecast["calibration_full_fillup_date"], "2026-09-10")
         self.assertEqual(snapshot.fuel_forecast["consumption_samples"], 2)
+
+    def test_manual_range_calibration_matches_dashboard_and_then_counts_down(self):
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        self.assertEqual(snapshot.fuel_forecast["primary_fillup_count"], 2)
+        self.assertEqual(snapshot.fuel_forecast["distance_since_calibration_km"], 28)
+        self.assertEqual(snapshot.fuel_forecast["fuel_available_since_calibration_l"], 60)
+
+        consumption = range_calibration_consumption(snapshot, 900)
+        self.assertAlmostEqual(consumption, 6.4655, places=4)
+
+        calibrated = apply_range_calibration(
+            snapshot,
+            consumption,
+            target_range_km=900,
+            calibrated_at="2026-09-21T12:00:00+02:00",
+            today=date(2026, 9, 21),
+        )
+        self.assertAlmostEqual(calibrated.estimated_range_remaining_km, 900, places=1)
+        self.assertEqual(calibrated.fuel_forecast["confidence"], "manual")
+        self.assertTrue(calibrated.fuel_forecast["manual_calibration_active"])
+        self.assertEqual(calibrated.fuel_forecast["consumption_basis_source"], "manual_range_calibration")
+        self.assertAlmostEqual(
+            calibrated.fuel_forecast["automatic_consumption_basis_l_per_100km"],
+            5.9,
+            places=3,
+        )
+
+        moved_meta = dict(snapshot.fuel_forecast)
+        moved_meta["distance_since_calibration_km"] = 38
+        moved = parser.replace(snapshot, fuel_forecast=moved_meta)
+        moved_calibrated = apply_range_calibration(
+            moved,
+            consumption,
+            target_range_km=900,
+            today=date(2026, 9, 22),
+        )
+        self.assertAlmostEqual(moved_calibrated.estimated_range_remaining_km, 890, places=1)
 
     def test_cost_month_end_overflow_is_clamped_but_trip_dates_stay_strict(self):
         overflow = sample_csv().replace("2026-09-25 12:00", "2026-09-31 05:00", 1)
