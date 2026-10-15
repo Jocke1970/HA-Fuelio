@@ -207,21 +207,27 @@ const ENTITY_SLUGS = Object.freeze({
       this._signature = null;
       this.shadowRoot.addEventListener("click", async (event) => {
         const openCalibration = event.target.closest?.("[data-range-calibrate]");
-        if (openCalibration) {
+        const isOpenCalibration = openCalibration?.dataset &&
+          Object.prototype.hasOwnProperty.call(openCalibration.dataset, "rangeCalibrate");
+        if (isOpenCalibration) {
           this._rangeDialog = true;
           this._rangeError = "";
           this._render();
           return;
         }
         const closeCalibration = event.target.closest?.("[data-range-close]");
-        if (closeCalibration || event.target?.classList?.contains?.("calibration-backdrop")) {
+        const isCloseCalibration = closeCalibration?.dataset &&
+          Object.prototype.hasOwnProperty.call(closeCalibration.dataset, "rangeClose");
+        if (isCloseCalibration || event.target?.classList?.contains?.("calibration-backdrop")) {
           this._rangeDialog = false;
           this._rangeError = "";
           this._render();
           return;
         }
         const clearCalibration = event.target.closest?.("[data-range-clear]");
-        if (clearCalibration) {
+        const isClearCalibration = clearCalibration?.dataset &&
+          Object.prototype.hasOwnProperty.call(clearCalibration.dataset, "rangeClear");
+        if (isClearCalibration) {
           try {
             await this._callRangeService("clear_range_calibration");
             this._rangeDialog = false;
