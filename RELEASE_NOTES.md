@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.0b7 📊🚙
+
+Inline Resestatistik graphs and calmer dashboard defaults.
+
+- Start all main desktop dashboard sections collapsed by default.
+- Add a nested **Graf** expander inside **Resestatistik** that follows the same selected year/month/week/day period; no duplicate period selectors.
+- Keep **TripDist vs ODO-sträcka** as a clean two-line comparison without smoothing.
+- Render **Antal resor**, **Körtid** and **Snitt/resa** as actual-period bars with a rolling **3-period mean** line overlaid.
+- The rolling window follows chart granularity automatically: year charts use months, month charts use ISO weeks, and week charts use days.
+- Keep day as the terminal statistics level; no per-trip one-point graph is invented.
+- Reuse the existing bounded ZIP-derived trip statistics and self-contained SVG renderer. No new sensors, storage, write-back or external chart dependency.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b7`.
+- Release flow remains `dev → beta → main`; real Home Assistant validation is required before stable promotion.
+
 # HA-Fuelio 2026.11.0b6 📈🚙
 
 Trip-statistics drill-down charts.
