@@ -29,6 +29,10 @@ add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_co
 add('sensor.externa_sensorer_fuelio_vehicle_fuel_cost_per_logged_km_since_import_start', 'fuel_cost_per_km_all', 9);
 add('sensor.externa_sensorer_fuelio_vehicle_total_cost_per_logged_km_since_import_start', 'total_cost_per_km_all', 12);
 card.hass = { states, entities };
+card._open.annual = true;
+card._open.costs = true;
+card._open.fuel = true;
+card._render();
 const html = card.shadowRoot.innerHTML;
 assert.match(html, /Parkering/);
 assert.match(html, /Bränsle · månad/);
@@ -64,5 +68,5 @@ assert.match(serviceHtml, /Underhåll · september 2026/);
 assert.match(serviceHtml, /34,90 kr/);
 assert.match(serviceHtml, /Underhåll · år 2026/);
 assert.match(serviceHtml, /Underhåll · sedan importstart/);
-assert.match(serviceHtml, /2026\.11\.0b6/);
+assert.match(serviceHtml, /2026\.11\.0b7/);
 console.log('PASS: categorized costs, period-specific kr\/km, fuel-ups and maintenance render with mixed entity IDs');
