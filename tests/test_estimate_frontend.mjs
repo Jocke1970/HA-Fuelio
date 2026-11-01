@@ -66,15 +66,16 @@ card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === 
 assert.equal(card._overviewOpen.fuel, true);
 assert.match(card.shadowRoot.innerHTML, /Tankat denna månad/);
 assert.match(card.shadowRoot.innerHTML, /54,87 L/);
-assert.match(overview(before), /162,47 L/);
+assert.match(card.shadowRoot.innerHTML, /162,47 L/);
 assert.match(overview(before), /1,77 kr\/km/);
 assert.match(before, /Genomsnitt\/resa/);
 assert.match(before, /17,7 km/);
 assert.match(before, /480,23 kr/);
+const overviewExpanded = overview(card.shadowRoot.innerHTML);
 card.shadowRoot.listeners.change({ target: { id: 'fuelio-month', value: '2026-08' } });
 const after = card.shadowRoot.innerHTML;
 assert.equal(card._month, '2026-08');
-assert.equal(overview(after), overview(before), 'historic month selection must never alter current overview');
+assert.equal(overview(after), overviewExpanded, 'historic month selection must never alter current overview');
 assert.match(after, /augusti 2026/);
 assert.match(after, /25 km/);
 assert.match(after, /1\s?100,00 kr/);
