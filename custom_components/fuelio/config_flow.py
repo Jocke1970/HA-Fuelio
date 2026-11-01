@@ -5,10 +5,17 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import voluptuous as vol
 
-from .const import CONF_FILE_PATH, DEFAULT_BACKUP_PATH, DOMAIN
+from .const import (
+    CONF_ENABLE_CALENDAR,
+    CONF_FILE_PATH,
+    DEFAULT_BACKUP_PATH,
+    DEFAULT_ENABLE_CALENDAR,
+    DOMAIN,
+)
 from .parser import load_snapshot
 
 
@@ -16,6 +23,12 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """One config entry per locally stored Fuelio backup ZIP."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        """Return the options flow for optional Fuelio features."""
+        return FuelioOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Validate the ZIP and keep import paths inside HA's config folder."""
@@ -37,7 +50,7 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     # Do not expose a registration/vehicle name in the entry title.
                     # Existing titles are intentionally not silently migrated.
                     return self.async_create_entry(
-                        title="Fuelio vehicle",
+                        title="Fuelio",
                         data={CONF_FILE_PATH: str(candidate)},
                     )
             except (OSError, ValueError):
@@ -45,3 +58,20 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema({vol.Required(CONF_FILE_PATH, default=DEFAULT_BACKUP_PATH): str})
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+
+class FuelioOptionsFlow(config_entries.OptionsFlow):
+    """Configure optional Fuelio features without replacing the config entry."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Configure optional platforms."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        schema = vol.Schema({
+            vol.Required(
+                CONF_ENABLE_CALENDAR,
+                default=self.config_entry.options.get(CONF_ENABLE_CALENDAR, DEFAULT_ENABLE_CALENDAR),
+            ): bool,
+        })
+        return self.async_show_form(step_id="init", data_schema=schema)

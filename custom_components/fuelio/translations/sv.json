@@ -4,14 +4,185 @@
     "step": {
       "user": {
         "title": "Fuelio lokal ZIP-backup",
-        "description": "Ange sökvägen till Fuelios sync-ZIP i Home Assistants konfigurationsmapp. Ingen Google Drive-inloggning behövs i den här utvecklingsversionen.",
-        "data": {"file_path": "Sökväg till ZIP-fil"}
+        "description": "Ange sökvägen till Fuelios synk-ZIP i Home Assistants konfigurationsmapp.",
+        "data": {
+          "file_path": "Sökväg till ZIP-fil"
+        }
       }
     },
     "error": {
       "outside_config": "ZIP-filen måste ligga i Home Assistants konfigurationsmapp.",
       "invalid_backup": "Kan inte läsa ZIP-filen. Kontrollera att den finns och är en Fuelio-backup med metriska enheter."
     },
-    "abort": {"already_configured": "ZIP-filen är redan konfigurerad."}
+    "abort": {
+      "already_configured": "ZIP-filen är redan konfigurerad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fuelio-alternativ",
+        "description": "Välj vilka valfria delar av integrationen som ska vara aktiva.",
+        "data": {
+          "enable_calendar": "Aktivera Fuelio-kalender"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "trip_count": {
+        "name": "Resor"
+      },
+      "trip_distance_km": {
+        "name": "Resesträcka"
+      },
+      "monthly_trip_distance_km": {
+        "name": "Resesträcka denna månad"
+      },
+      "trip_duration_hours": {
+        "name": "Körtid"
+      },
+      "estimated_trip_cost": {
+        "name": "Beräknade resekostnader (inte faktiska utgifter)"
+      },
+      "fuel_count": {
+        "name": "Tankningar"
+      },
+      "fuel_litres": {
+        "name": "Tankad volym"
+      },
+      "fuel_cost": {
+        "name": "Bränsleutgifter"
+      },
+      "monthly_fuel_cost": {
+        "name": "Bränsleutgifter denna månad"
+      },
+      "last_fuel_price": {
+        "name": "Senaste bränslepris"
+      },
+      "last_reported_consumption": {
+        "name": "Senast rapporterad förbrukning"
+      },
+      "last_fillup_date": {
+        "name": "Senaste tankning"
+      },
+      "expense_count": {
+        "name": "Utgiftsposter"
+      },
+      "other_expenses": {
+        "name": "Övriga utgifter"
+      },
+      "monthly_other_expenses": {
+        "name": "Övriga utgifter denna månad"
+      },
+      "upcoming_expense_count": {
+        "name": "Framtida utgiftsposter"
+      },
+      "total_actual_cost": {
+        "name": "Totala faktiska utgifter"
+      },
+      "last_trip_date": {
+        "name": "Senaste resa"
+      },
+      "latest_odometer_km": {
+        "name": "Senaste mätarställning"
+      },
+      "distance_since_last_fillup_km": {
+        "name": "Sträcka sedan senaste tankning"
+      },
+      "estimated_fuel_remaining_l": {
+        "name": "Beräknat kvarvarande bränsle"
+      },
+      "estimated_range_remaining_km": {
+        "name": "Beräknad återstående räckvidd"
+      },
+      "estimated_days_to_next_fillup": {
+        "name": "Beräknade dagar till nästa tankning"
+      },
+      "estimated_next_fillup_date": {
+        "name": "Beräknad nästa tankning"
+      },
+      "last_app_sync": {
+        "name": "Senaste Fuelio-appsynk"
+      },
+      "fuel_count_month": {
+        "name": "Tankningar denna månad"
+      },
+      "fuel_count_year": {
+        "name": "Tankningar i år"
+      },
+      "fuel_cost_per_km_month": {
+        "name": "Bränslekostnad per ODO-km denna månad"
+      },
+      "total_cost_per_km_month": {
+        "name": "Total kostnad per ODO-km denna månad"
+      },
+      "fuel_cost_per_km_year": {
+        "name": "Bränslekostnad per ODO-km i år"
+      },
+      "total_cost_per_km_year": {
+        "name": "Total kostnad per ODO-km i år"
+      },
+      "fuel_cost_per_km_all": {
+        "name": "Bränslekostnad per ODO-km sedan importstart"
+      },
+      "total_cost_per_km_all": {
+        "name": "Total kostnad per ODO-km sedan importstart"
+      },
+      "fuel_price_min_year": {
+        "name": "Lägsta bränslepris i år"
+      },
+      "fuel_price_max_year": {
+        "name": "Högsta bränslepris i år"
+      },
+      "fuel_price_min_all": {
+        "name": "Lägsta bränslepris sedan importstart"
+      },
+      "fuel_price_max_all": {
+        "name": "Högsta bränslepris sedan importstart"
+      },
+      "consumption_min_year": {
+        "name": "Lägsta rapporterade förbrukning i år"
+      },
+      "consumption_max_year": {
+        "name": "Högsta rapporterade förbrukning i år"
+      },
+      "consumption_min_all": {
+        "name": "Lägsta rapporterade förbrukning sedan importstart"
+      },
+      "consumption_max_all": {
+        "name": "Högsta rapporterade förbrukning sedan importstart"
+      },
+      "monthly_cost_breakdown": {
+        "name": "Månatlig kostnadsöversikt"
+      }
+    }
+  },
+  "services": {
+    "calibrate_range": {
+      "name": "Kalibrera räckvidd",
+      "description": "Justera den aktuella tankens teoretiska räckvidd mot bilens färddator utan att skriva till Fuelio.",
+      "fields": {
+        "entity_id": {
+          "name": "Fuelio-entitet",
+          "description": "En entitet från den Fuelio-konfiguration som ska kalibreras."
+        },
+        "range_km": {
+          "name": "Räckvidd",
+          "description": "Aktuell återstående räckvidd enligt bilens färddator."
+        }
+      }
+    },
+    "clear_range_calibration": {
+      "name": "Återställ räckviddskalibrering",
+      "description": "Ta bort den manuella kalibreringen och återgå till Fuelios automatiska förbrukningsunderlag.",
+      "fields": {
+        "entity_id": {
+          "name": "Fuelio-entitet",
+          "description": "En entitet från den Fuelio-konfiguration vars kalibrering ska tas bort."
+        }
+      }
+    }
   }
 }

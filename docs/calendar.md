@@ -24,7 +24,7 @@ The parser may retain only these calendar-facing fields:
 - sanitized user-entered title when present (`CostTitle` or `Title`)
 - sanitized user-entered `Notes` when present
 
-Categories containing `Underhåll`, `Service` or `Reparation` are shown as maintenance events with a wrench marker. Other rows are general expense events. When a title is present it becomes the visible event title; category, amount and note are shown in the description.
+Categories containing the Fuelio source names `Underhåll`, `Service` or `Reparation` are shown as maintenance events with a wrench marker. Other rows are general expense events. When a title is present it becomes the visible event title; category, amount and note are shown in the description.
 
 Internal Fuelio IDs, vehicle identifiers and raw cost rows are not projected.
 

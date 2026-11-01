@@ -83,10 +83,10 @@ class FuelioCalendar(CoordinatorEntity[FuelioCoordinator], CalendarEntity):
                     details.append(" · ".join(travel))
                 end_odo = item.get("end_odometer_km")
                 if isinstance(end_odo, (int, float)):
-                    details.append(f"Mätarställning efter resa: {end_odo:.0f} km")
+                    details.append(f"ODO: {end_odo:.0f} km")
                 note = item.get("note")
                 if note:
-                    details.append(f"Notering: {note}")
+                    details.append(f"📝 {note}")
                 details.append("Fuelio · read-only")
                 events.append(
                     CalendarEvent(

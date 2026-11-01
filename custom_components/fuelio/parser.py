@@ -434,7 +434,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         if identifier in category_names:
             raise ValueError("Duplicate Fuelio cost category ID")
         label = " ".join(category.get("Name", "").split())[:64]
-        category_names[identifier] = label or "Okategoriserat"
+        category_names[identifier] = label or "Uncategorized"
     expense_categories_by_month: dict[str, dict[str, Decimal]] = {}
     expense_count = 0
     expenses = Decimal(0)
@@ -447,7 +447,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         day = _cost_date(record["Date"])
         amount = _nonnegative(record["Cost"], default=Decimal(0))
         assert amount is not None
-        label = category_names.get(record.get("CostTypeID", "").strip(), "Okategoriserat")
+        label = category_names.get(record.get("CostTypeID", "").strip(), "Uncategorized")
         expense_count += 1
 
         # Keep a bounded local calendar projection. Title and note are sanitized
@@ -825,7 +825,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         remainder = sum((amount for _, amount in ordered[19:]), Decimal(0))
         rows = [{"name": label, "amount": rounded(amount)} for label, amount in visible]
         if remainder:
-            rows.append({"name": "Övriga kategorier", "amount": rounded(remainder)})
+            rows.append({"name": "Other categories", "amount": rounded(remainder)})
         return rows
 
     # Always include the current month, even if it has neither trips nor costs.

@@ -102,7 +102,7 @@ class CostAnalyticsTests(unittest.TestCase):
 
     def test_missing_category_table_falls_back_to_uncategorized(self):
         result = parser.parse_backup(sample_csv(), today=date(2026, 9, 21))
-        self.assertEqual(list(result.all_cost_categories), [{"name": "Okategoriserat", "amount": 200}])
+        self.assertEqual(list(result.all_cost_categories), [{"name": "Uncategorized", "amount": 200}])
 
 
 if __name__ == "__main__":
