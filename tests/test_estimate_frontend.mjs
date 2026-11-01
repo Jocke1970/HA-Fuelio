@@ -47,7 +47,7 @@ card.hass = { states, entities };
 card._open.costs = true;
 card._render();
 const before = card.shadowRoot.innerHTML;
-const overview = (html) => html.split('<div class="overview">')[1]?.split('<div class="tripbar">')[0];
+const overview = (html) => html.split('<div class="overview">')[1]?.split('<div class="dashboard-grid">')[0];
 assert.ok(overview(before), 'four-panel overview must render');
 assert.match(overview(before), /Mätarställning/);
 assert.match(overview(before), /data-overview-section="odometer"/);
