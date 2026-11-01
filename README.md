@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.1b1` on `beta`; stable remains `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.1` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
 
-## Features and data contract (2026.11.1b1)
+## Features and data contract (2026.11.1)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **Bilingual integration UI (English/Swedish):** config flow, options, sensor friendly names, services and both bundled dashboard cards follow the Home Assistant/browser language. Backend aggregate data stays language-neutral where practical.
@@ -38,7 +38,7 @@ For detailed fields see [analytics schema](docs/analytics-schema.md), [calendar 
 
 ### Integration options
 
-Open **Settings → Devices & services → Fuelio → Configure** to enable or disable the optional Fuelio calendar. Existing installations default to **enabled**, preserving the `2026.11.0` behavior. Disabling the calendar removes only the calendar platform after reload; sensor and dashboard data remain unchanged.
+Open **Settings → Devices & services → Fuelio → Configure** to enable or disable the optional Fuelio calendar. Existing installations default to **enabled**, preserving the previous calendar behavior. Disabling the calendar removes only the calendar platform after reload; sensor and dashboard data remain unchanged.
 
 ## Install or upgrade
 
