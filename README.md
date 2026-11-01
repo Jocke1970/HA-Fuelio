@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.0b2` on `beta`.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Development candidate: `2026.11.0b3` on `dev`; latest published test release is `2026.11.0b2` on `beta`.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
 
-## Features and data contract (2026.11.0b2)
+## Features and data contract (2026.11.0b3 candidate)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
@@ -15,6 +15,7 @@ Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel
 - **Service & underhåll** surfaces existing booked Fuelio categories matching Underhåll, Service or Reparation for the selected month, selected annual-report year and import lifetime. This is presentation of already-counted costs, not a separate accounting model.
 - Desktop-first dashboard with an independent annual-report selector and internal SVG drill-down charts. The bundled read-only Lovelace card is served directly by the integration at `/fuelio/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
 - **Separate mobile dashboard** at `/fuelio/ha-fuelio-mobile-card.js`: compact odometer/sync header, horizontal estimated tank bar, range and consumption, current-month cost summary, and a collapsed details/calibration section. It shows **RESERV** only when the estimated range is known and below 75 km. The mobile card uses the same 42 entities and adds no backend sensors.
+- **Read-only Fuelio calendar**: one Home Assistant calendar entity projects non-template, non-income `Costs` rows dated today or later as all-day events. Only date, sanitized category, amount and coarse event kind are retained; titles, notes, internal IDs and vehicle identifiers are discarded. Service/underhåll/reparation categories are marked as maintenance. The calendar projection is capped at 256 events. Estimated fuel-up forecasts are intentionally excluded in b3.
 
 ### Distances and cost definitions
 
@@ -28,7 +29,7 @@ Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel
 
 **Tank/range forecast:** the latest primary-tank full fill-up is the calibration point. Later partial fills add recorded litres; estimated driving consumption prefers the recent measured full→full basis when available, otherwise it uses the latest up-to-two positive Fuelio-reported L/100 km values. Remaining litres are bounded to tank capacity, remaining range is theoretical, and next-fuel-up date/days use up to 30 calendar days of logged driving pace. The dashboard can apply an HA-local **current-tank range calibration** from the vehicle computer: entered remaining km are converted to a temporary consumption basis, persisted across HA reloads, and automatically cleared only when the latest actual primary-tank fill-up changes. Historical/backfilled tank records do not clear it. This override never writes to Fuelio or the ZIP. The sync timestamp is the local ZIP mtime; in the tested rclone workflow it matches Drive's preserved modification time.
 
-For detailed fields see [analytics schema](docs/analytics-schema.md), [ODO algorithm](ODOMETER_ALGORITHM.md) and [beta.8 test status](BETA8_VALIDATION.md).
+For detailed fields see [analytics schema](docs/analytics-schema.md), [calendar model](docs/calendar.md), [ODO algorithm](ODOMETER_ALGORITHM.md) and [beta.8 test status](BETA8_VALIDATION.md).
 
 ## Install or upgrade
 
@@ -81,4 +82,4 @@ node tests/test_estimate_frontend.mjs
 node tests/test_mobile_frontend.mjs
 ```
 
-**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Do not call beta.9 stable or promote to `main` based solely on automated tests.
+**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. For b3, verify that one Fuelio calendar entity is created, today's/future real cost events render correctly, and templates/incomes do not appear. Do not call beta.9 stable or promote to `main` based solely on automated tests.
