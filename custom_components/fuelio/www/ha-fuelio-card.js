@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b8 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b9 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b8";
+  const CARD_VERSION = "2026.11.0b9";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -220,7 +220,7 @@ const ENTITY_SLUGS = Object.freeze({
       this._tripDay = null;
       this._tripGraphOpen = false;
       this._tripGraphMetric = "distance";
-      this._overviewOpen = { fuel: false, booked: false, drivecost: false };
+      this._overviewOpen = { odometer: false, fuel: false, booked: false, drivecost: false };
       this._chart = null;
       this._rangeDialog = false;
       this._rangeError = "";
@@ -980,8 +980,11 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._kpi("🧭", "Räckvidd kvar", decimal(this._value("estimated_range_remaining_km"), "km"))}
       </div>`;
       const overview = `<div class="overview">
-        ${this._panel("🛣️", "Mätarställning", [
+        ${this._rangePanel(forecast)}
+        ${this._overviewExpander("odometer", "🛣️", "Mätarställning", [
           ["Aktuell", decimal(this._value("latest_odometer_km"), "km")],
+          ["Månad", decimal(nowMonth?.km, "km")]
+        ], [
           ["Denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth)],
           ["I år", decimal(currentYearData?.km, "km"), currentYearData?.odo_coverage === "partial_start" ? "Delperiod" : ""],
           ["Sedan importstart", decimal(aggregate.lifetime_odometer_km, "km")]
@@ -1012,7 +1015,6 @@ const ENTITY_SLUGS = Object.freeze({
           ["Beräknat bränsle · månad", kroner(nowMonth?.estimated_fuel)],
           ["Beräknat bränsle · år", kroner(currentYearData?.estimated_fuel)]
         ])}
-        ${this._rangePanel(forecast)}
       </div>`;
       const annual = `<label class="select-label" for="fuelio-year">Visa år</label>
       <select id="fuelio-year" ${allYears.length ? "" : "disabled"}>${allYears.map((row) => `<option value="${esc(String(row.year))}" ${String(row.year) === this._year ? "selected" : ""}>${esc(String(row.year))}</option>`).join("")}</select>
