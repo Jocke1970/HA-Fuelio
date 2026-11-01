@@ -42,6 +42,41 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertIn("calibrate_range:", services)
         self.assertIn("clear_range_calibration:", services)
 
+    def test_bilingual_translation_contract(self):
+        component = ROOT / "custom_components" / "fuelio"
+        strings = json.loads((component / "strings.json").read_text(encoding="utf-8"))
+        en = json.loads((component / "translations" / "en.json").read_text(encoding="utf-8"))
+        sv = json.loads((component / "translations" / "sv.json").read_text(encoding="utf-8"))
+
+        def shape(value):
+            if isinstance(value, dict):
+                return {key: shape(value[key]) for key in sorted(value)}
+            return None
+
+        self.assertEqual(shape(strings), shape(en))
+        self.assertEqual(shape(en), shape(sv))
+        self.assertIn("options", en)
+        self.assertIn("enable_calendar", en["options"]["step"]["init"]["data"])
+        self.assertIn("services", en)
+        self.assertIn("calibrate_range", en["services"])
+        self.assertEqual(len(en["entity"]["sensor"]), 42)
+
+        sensor_text = (component / "sensor.py").read_text(encoding="utf-8")
+        self.assertEqual(sensor_text.count("translation_key="), 42)
+        self.assertNotIn('FuelioSensorDescription(key="trip_count", name=', sensor_text)
+
+    def test_calendar_option_defaults_on_and_is_reloadable(self):
+        component = ROOT / "custom_components" / "fuelio"
+        const_text = (component / "const.py").read_text(encoding="utf-8")
+        flow_text = (component / "config_flow.py").read_text(encoding="utf-8")
+        init_text = (component / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn('CONF_ENABLE_CALENDAR = "enable_calendar"', const_text)
+        self.assertIn("DEFAULT_ENABLE_CALENDAR = True", const_text)
+        self.assertIn("FuelioOptionsFlow", flow_text)
+        self.assertIn("async_get_options_flow", flow_text)
+        self.assertIn("entry.add_update_listener(_async_reload_entry)", init_text)
+        self.assertIn("entry.options.get(CONF_ENABLE_CALENDAR, DEFAULT_ENABLE_CALENDAR)", init_text)
+
 
 if __name__ == "__main__":
     unittest.main()
