@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b9 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b10 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b9";
+  const CARD_VERSION = "2026.11.0b10";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -1070,7 +1070,8 @@ const ENTITY_SLUGS = Object.freeze({
       }
       const tripKey = this._tripLevel === "year" ? this._tripYear : this._tripLevel === "month" ? this._tripMonth : this._tripLevel === "week" ? this._tripWeek : this._tripDay;
       const tripGraph = `<div class="trip-graph-box"><button type="button" class="trip-graph-toggle" data-trip-graph-toggle aria-expanded="${this._tripGraphOpen}"><span>📈 Graf</span><span aria-hidden="true">${this._tripGraphOpen ? "⌃" : "⌄"}</span></button>${this._tripGraphOpen ? `<div class="trip-graph-body">${this._tripInlineGraph(this._tripLevel, tripKey)}</div>` : ""}</div>`;
-      const tripstats = `${tripControls}${tripDetail}${tripGraph}<div class="notice">TripDist och ODO är två separata mätningar. TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.</div>`;
+      const tripLifetime = `<div class="tripbar"><span>🛣️ <strong>${esc(decimal(this._value("trip_count"), "resor"))}</strong> · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Sedan importstart</span></div>`;
+      const tripstats = `${tripLifetime}${tripControls}${tripDetail}${tripGraph}<div class="notice">TripDist och ODO är två separata mätningar. TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.</div>`;
 
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total), "", "costs", allMonths[0]?.month?.slice(0,4))}
@@ -1155,7 +1156,6 @@ const ENTITY_SLUGS = Object.freeze({
         </div>
         ${kpis}
         ${overview}
-        <div class="tripbar"><span>🛣️ <strong>${esc(decimal(this._value("trip_count"), "resor"))}</strong> · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Löpande Fuelio-statistik sedan importstart</span></div>
         <div class="dashboard-grid">
           ${this._section("annual", "📊", "Årsöversikt", annual)}
           ${this._section("tripstats", "🚙", "Resestatistik", tripstats)}
