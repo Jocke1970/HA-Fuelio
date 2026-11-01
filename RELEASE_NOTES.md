@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.0b2 📱⛽
+
+Dedicated mobile dashboard.
+
+- Add a separate bundled `ha-fuelio-mobile-card.js` for phone dashboards while keeping the full desktop card independent.
+- Mobile overview focuses on odometer, ZIP sync, estimated tank status/range, distance since fuel-up, consumption, current-month spending and cost/km.
+- Replace the large tank metrics with a compact horizontal tank bar based on estimated litres versus Fuelio tank capacity.
+- Show a clear **RESERV** state only when estimated remaining range is known and strictly below **75 km**; unknown/unavailable range never triggers a reserve warning.
+- Keep range calibration in the collapsed **Mer information** section, including the existing automatic-clear behavior on the next primary-tank fill-up.
+- Surface measured full→full consumption/trend in the details section when available.
+- Serve the mobile card directly at `/fuelio/ha-fuelio-mobile-card.js`; no new sensors or backend data are required.
+- Sensor count remains **42** and the desktop card retains its existing feature set.
+- Add synthetic mobile-card regressions for reserve threshold, unavailable range, compact monthly data, entity resolution and range calibration.
+- Release flow remains `dev → beta → main`; validate the mobile layout in real Home Assistant before stable promotion.
+
 # HA-Fuelio 2026.11.0b1 🚙📊
 
 Measured full-to-full fuel economy and safer automatic range forecasting.
