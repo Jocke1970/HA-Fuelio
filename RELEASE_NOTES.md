@@ -1,3 +1,16 @@
+# HA-Fuelio 2026.11.0b10 🧹🚙
+
+Final beta layout polish before stable review.
+
+- Move the lifetime trip summary (**trip count · logged km · travel time**) into the top of **Resestatistik**.
+- Remove that summary from the gap between the top overview and the dashboard section list.
+- Keep the summary labelled **Sedan importstart** inside Resestatistik.
+- Preserve the b9 overview order and compact summary expanders unchanged.
+- No new sensors, backend storage, write-back or data-model changes.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b10`.
+- Release flow remains `dev → beta → main`; stable promotion should follow successful real-HA validation of this final beta layout.
+
 # HA-Fuelio 2026.11.0b9 🧭🚙
 
 Overview order and odometer summary polish.
