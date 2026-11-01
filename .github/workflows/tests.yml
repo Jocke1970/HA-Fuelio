@@ -24,3 +24,5 @@ jobs:
         run: node tests/test_cost_frontend.mjs
       - name: Four-panel overview and historical selector regression
         run: node tests/test_estimate_frontend.mjs
+      - name: Mobile frontend regression
+        run: node tests/test_mobile_frontend.mjs

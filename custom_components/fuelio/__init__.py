@@ -35,6 +35,8 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 FRONTEND_URL = "/fuelio/ha-fuelio-card.js"
 FRONTEND_FILE = Path(__file__).parent / "www" / "ha-fuelio-card.js"
+MOBILE_FRONTEND_URL = "/fuelio/ha-fuelio-mobile-card.js"
+MOBILE_FRONTEND_FILE = Path(__file__).parent / "www" / "ha-fuelio-mobile-card.js"
 FRONTEND_REGISTERED = "_frontend_registered"
 SERVICES_REGISTERED = "_services_registered"
 CALIBRATION_STORE_VERSION = 1
@@ -171,7 +173,10 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     if domain_data.get(FRONTEND_REGISTERED):
         return
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(FRONTEND_URL, str(FRONTEND_FILE), cache_headers=False)]
+        [
+            StaticPathConfig(FRONTEND_URL, str(FRONTEND_FILE), cache_headers=False),
+            StaticPathConfig(MOBILE_FRONTEND_URL, str(MOBILE_FRONTEND_FILE), cache_headers=False),
+        ]
     )
     domain_data[FRONTEND_REGISTERED] = True
 

@@ -25,9 +25,12 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertIn("version", manifest)
         self.assertTrue(manifest.get("issue_tracker"))
         card = component / "www" / "ha-fuelio-card.js"
+        mobile_card = component / "www" / "ha-fuelio-mobile-card.js"
         self.assertTrue(card.is_file(), "HACS release must bundle the Lovelace card")
+        self.assertTrue(mobile_card.is_file(), "HACS release must bundle the mobile Lovelace card")
         init_text = (component / "__init__.py").read_text(encoding="utf-8")
         self.assertIn('FRONTEND_URL = "/fuelio/ha-fuelio-card.js"', init_text)
+        self.assertIn('MOBILE_FRONTEND_URL = "/fuelio/ha-fuelio-mobile-card.js"', init_text)
         self.assertIn("async_register_static_paths", init_text)
         self.assertIn("cache_headers=False", init_text)
         self.assertIn("async def async_setup(hass: HomeAssistant, config: dict)", init_text)

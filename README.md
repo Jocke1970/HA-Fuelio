@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.0b1` on `beta`.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Development candidate: `2026.11.0b2` on `dev`; latest published test release is `2026.11.0b1` on `beta`.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
 
-## Features and data contract (2026.11.0b1)
+## Features and data contract (2026.11.0b2 candidate)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
@@ -14,6 +14,7 @@ Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel
 - Clickable KPI/annual tiles open self-contained SVG chart modals for monthly booked costs, ODO distance, purchased litres, booked-vs-estimated cost/km and annual expense-category distribution. Graphs use the same bounded aggregate attributes already exposed by the integration; missing values are not converted to zero.
 - **Service & underhåll** surfaces existing booked Fuelio categories matching Underhåll, Service or Reparation for the selected month, selected annual-report year and import lifetime. This is presentation of already-counted costs, not a separate accounting model.
 - Desktop-first dashboard with an independent annual-report selector and internal SVG drill-down charts. The bundled read-only Lovelace card is served directly by the integration at `/fuelio/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
+- **Separate mobile dashboard** at `/fuelio/ha-fuelio-mobile-card.js`: compact odometer/sync header, horizontal estimated tank bar, range and consumption, current-month cost summary, and a collapsed details/calibration section. It shows **RESERV** only when the estimated range is known and below 75 km. The mobile card uses the same 42 entities and adds no backend sensors.
 
 ### Distances and cost definitions
 
@@ -42,9 +43,18 @@ For detailed fields see [analytics schema](docs/analytics-schema.md), [ODO algor
 type: custom:ha-fuelio-card
 entity: sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown
 title: Fuelio · Bilöversikt
+
 ```
 
-Use your **actual** monthly-breakdown entity ID on other installations; do not assume it starts with `sensor.mmk912_`. The card does not call HA services or make remote requests. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
+Mobilkort på en mobil-dashboard:
+
+```yaml
+type: custom:ha-fuelio-mobile-card
+entity: sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown
+title: Caddy
+```
+
+För mobilkortet behöver `/fuelio/ha-fuelio-mobile-card.js` också läggas till som en separat **JavaScript Module** under dashboardens Resources. Use your **actual** monthly-breakdown entity ID on other installations; do not assume it starts with `sensor.mmk912_`. Both cards stay local/read-only toward Fuelio; the range-calibration controls call only HA-Fuelio's local Home Assistant services and never write to Fuelio or the ZIP. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
 
 After `/fuelio/ha-fuelio-card.js` has been verified, the old manual copy `/config/www/ha-fuelio-card.js` may be deleted. It is no longer part of the supported update path.
 
@@ -63,10 +73,12 @@ Remaining checks: compare the per-interval estimates and ODO checkpoints with Fu
 ```bash
 python -m unittest discover -s tests -v
 node --check custom_components/fuelio/www/ha-fuelio-card.js
+node --check custom_components/fuelio/www/ha-fuelio-mobile-card.js
 node tests/test_frontend.mjs
 node tests/test_frontend_real_ids.mjs
 node tests/test_cost_frontend.mjs
 node tests/test_estimate_frontend.mjs
+node tests/test_mobile_frontend.mjs
 ```
 
 **Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Do not call beta.9 stable or promote to `main` based solely on automated tests.
