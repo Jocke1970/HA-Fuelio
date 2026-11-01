@@ -42,7 +42,15 @@ const states = {
       average_trip_km: 17.5, average_reported_consumption: 5.56, reported_consumption_samples: 2,
       average_fuel_price: 18, fuel_price_min: 17, fuel_price_max: 20, consumption_min: 5.3, consumption_max: 5.8,
       categories: [{ name: "Parkering", amount: 200 }] }
-  ], history_truncated: false }),
+  ], history_truncated: false, trip_statistics: {
+    years: [{ year: "2026", trip_km: 350.5, odo_km: 350, trip_count: 20, duration_hours: 8.5, average_trip_km: 17.525, odo_coverage: "prior_checkpoint", odo_start_on: "2025-12-31", odo_end_on: "2026-09-21" }],
+    months: [
+      { month: "2026-09", trip_km: 180.5, odo_km: 180, trip_count: 10, duration_hours: 4.2, average_trip_km: 18.05, odo_coverage: "prior_checkpoint", odo_start_on: "2026-08-31", odo_end_on: "2026-09-21" },
+      { month: "2026-08", trip_km: 170, odo_km: 170, trip_count: 10, duration_hours: 4.3, average_trip_km: 17, odo_coverage: "prior_checkpoint", odo_start_on: "2026-07-31", odo_end_on: "2026-08-31" }
+    ],
+    weeks: [{ week: "2026-W38", start: "2026-09-14", end: "2026-09-20", trip_km: 42.4, odo_km: 42, trip_count: 4, duration_hours: 1.4, average_trip_km: 10.6, odo_coverage: "prior_checkpoint", odo_start_on: "2026-09-13", odo_end_on: "2026-09-20" }],
+    days: [{ date: "2026-09-18", trip_km: 18.2, odo_km: 18, trip_count: 2, duration_hours: 0.6, average_trip_km: 9.1, odo_coverage: "prior_checkpoint", odo_start_on: "2026-09-17", odo_end_on: "2026-09-18" }]
+  } }),
   [prefix + "latest_odometer_km"]: state(10001),
   [prefix + "trip_count"]: state(20),
   [prefix + "trip_distance_km"]: state(350),
@@ -99,6 +107,9 @@ assert.equal(card._rangeDialog, false);
 assert.match(card.shadowRoot.innerHTML, /ZIP uppdaterad/);
 assert.match(card.shadowRoot.innerHTML, /Årsöversikt/);
 assert.match(card.shadowRoot.innerHTML, /Årsrapport · 2026/);
+assert.match(card.shadowRoot.innerHTML, /Resestatistik/);
+assert.match(card.shadowRoot.innerHTML, /350,5 km/);
+assert.match(card.shadowRoot.innerHTML, /350 km/);
 assert.equal(card._years().length, 1);
 assert.equal(card._chartNumber(null), null);
 assert.equal(card._chartNumber(undefined), null);
@@ -128,6 +139,13 @@ assert.equal(card._months().length, 2);
 const before = card.shadowRoot.innerHTML;
 card.hass = { states };
 assert.equal(card.shadowRoot.innerHTML, before, "Unrelated HA setter calls must not redraw the card");
+card.shadowRoot.listeners.change({ target: { id: "fuelio-trip-level", value: "week" } });
+assert.equal(card._tripLevel, "week");
+assert.match(card.shadowRoot.innerHTML, /Vecka 38 · 2026/);
+assert.match(card.shadowRoot.innerHTML, /42,4 km/);
+card.shadowRoot.listeners.change({ target: { id: "fuelio-trip-level", value: "day" } });
+assert.equal(card._tripLevel, "day");
+assert.match(card.shadowRoot.innerHTML, /18,2 km/);
 card.shadowRoot.listeners.change({ target: { id: "fuelio-month", value: "2026-08" } });
 assert.equal(card._month, "2026-08");
 assert.match(card.shadowRoot.innerHTML, /Bokförda utgifter/);
