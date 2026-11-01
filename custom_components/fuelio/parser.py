@@ -18,6 +18,24 @@ MAX_CSV_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 100_000
 MAX_MONTHS_IN_ATTRIBUTES = 120  # Bound recorder/state attribute size; newest ten years.
 
+try:
+    from .fuel_economy import FuelEconomyEvent, compute_fuel_economy
+except ImportError:  # Pure parser tests load this file outside the HA package.
+    import importlib.util
+    import sys
+
+    _economy_path = Path(__file__).with_name("fuel_economy.py")
+    _economy_spec = importlib.util.spec_from_file_location(
+        "fuelio_economy_under_test", _economy_path
+    )
+    if _economy_spec is None or _economy_spec.loader is None:
+        raise
+    _economy_module = importlib.util.module_from_spec(_economy_spec)
+    sys.modules[_economy_spec.name] = _economy_module
+    _economy_spec.loader.exec_module(_economy_module)
+    FuelEconomyEvent = _economy_module.FuelEconomyEvent
+    compute_fuel_economy = _economy_module.compute_fuel_economy
+
 
 @dataclass(frozen=True, slots=True)
 class FuelioSnapshot:
@@ -348,6 +366,9 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             "volume": volume,
             "full": fillup.get("Full", "").strip() == "1",
             "tank": fillup.get("TankNumber", "1").strip() or "1",
+            "fuel_type": fillup.get("FuelType", "").strip(),
+            "missed": fillup.get("Missed", "").strip() in {"1", "1.0"},
+            "exclude_distance": fillup.get("ExcludeDistance", "").strip() not in {"", "0", "0.0"},
         })
         reported = _nonnegative(fillup.get("l/100km (optional)", ""))
         if reported is not None and (last_consumption_day is None or day > last_consumption_day):
@@ -524,6 +545,35 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     latest_values = all_consumptions[-2:]
     latest_two_consumption = (sum(latest_values, Decimal(0)) / len(latest_values)) if latest_values else None
 
+    economy_events = [
+        FuelEconomyEvent(
+            day=event["day"],
+            odometer_km=event["odo"],
+            litres=event["volume"],
+            full=event["full"],
+            tank=event["tank"],
+            fuel_type=event["fuel_type"],
+            missed=event["missed"],
+            exclude_distance=event["exclude_distance"],
+        )
+        for event in fuel_events
+        if event["odo"] is not None
+    ]
+    economy_summary = compute_fuel_economy(
+        economy_events,
+        tank_capacity_l=tank_capacity,
+        tank="1",
+    )
+    measured_basis_raw = economy_summary.get("recent_consumption_l_per_100km")
+    if economy_summary.get("measured_windows", 0) > 0 and measured_basis_raw is not None:
+        automatic_consumption = Decimal(str(measured_basis_raw))
+        automatic_consumption_source = "measured_full_to_full_recent"
+        automatic_consumption_samples = int(economy_summary["measured_windows"])
+    else:
+        automatic_consumption = latest_two_consumption
+        automatic_consumption_source = "fuelio_latest_two"
+        automatic_consumption_samples = len(latest_values)
+
     # Range forecast. A full primary-tank fill is a calibration point. Later
     # partial fills add their recorded litres; driven distance consumes fuel at
     # the rolling mean of the latest two valid reported consumption values.
@@ -555,8 +605,9 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
 
     forecast_meta: dict = {
         "confidence": "unavailable",
-        "consumption_basis_l_per_100km": rounded(latest_two_consumption, 3) if latest_two_consumption is not None else None,
-        "consumption_samples": len(latest_values),
+        "consumption_basis_l_per_100km": rounded(automatic_consumption, 3) if automatic_consumption is not None else None,
+        "consumption_samples": automatic_consumption_samples,
+        "economy": economy_summary,
         "tank_capacity_l": rounded(tank_capacity, 3) if tank_capacity is not None else None,
         "calibration_full_fillup_date": None,
         "partial_fillups_since_calibration": 0,
@@ -567,14 +618,14 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         "latest_primary_fillup_marker": latest_primary_fillup_marker,
         "distance_since_calibration_km": None,
         "fuel_available_since_calibration_l": None,
-        "consumption_basis_source": "fuelio_latest_two",
+        "consumption_basis_source": automatic_consumption_source,
         "manual_calibration_active": False,
     }
     full_indexes = [index for index, event in enumerate(primary_events) if event["full"]]
     if (
         full_indexes
         and tank_capacity is not None and tank_capacity > 0
-        and latest_two_consumption is not None and latest_two_consumption > 0
+        and automatic_consumption is not None and automatic_consumption > 0
         and latest_odometer_value is not None
     ):
         calibration_index = full_indexes[-1]
@@ -583,10 +634,10 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         if calibration_odo is not None and latest_odometer_value >= calibration_odo:
             later = primary_events[calibration_index + 1:]
             added_litres = sum((event["volume"] for event in later), Decimal(0))
-            consumed_litres = (latest_odometer_value - calibration_odo) * latest_two_consumption / 100
+            consumed_litres = (latest_odometer_value - calibration_odo) * automatic_consumption / 100
             raw_remaining = tank_capacity + added_litres - consumed_litres
             estimated_fuel_remaining = min(tank_capacity, max(Decimal(0), raw_remaining))
-            estimated_range_remaining = estimated_fuel_remaining / latest_two_consumption * 100
+            estimated_range_remaining = estimated_fuel_remaining / automatic_consumption * 100
 
             window_start = today - timedelta(days=29)
             window_km = sum(
@@ -603,7 +654,11 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
 
             calibration_age = (today - calibration["day"]).days
             forecast_meta.update({
-                "confidence": "normal" if len(latest_values) >= 2 and calibration_age <= 90 else "limited",
+                "confidence": (
+                    economy_summary["confidence"]
+                    if automatic_consumption_source == "measured_full_to_full_recent"
+                    else ("normal" if len(latest_values) >= 2 and calibration_age <= 90 else "limited")
+                ),
                 "calibration_full_fillup_date": calibration["day"].isoformat(),
                 "partial_fillups_since_calibration": len(later),
                 "distance_since_calibration_km": rounded(latest_odometer_value - calibration_odo, 3),
