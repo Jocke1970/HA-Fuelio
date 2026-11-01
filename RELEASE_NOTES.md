@@ -90,7 +90,7 @@ Inline Trip statistics graphs and calmer dashboard defaults.
 Trip-statistics drill-down charts.
 
 - Add clickable charts to **Trip statistics** for year, month and week levels.
-- **TripDist** and **ODO-sträcka** share a two-series line chart so their divergence can be inspected over time without treating either as authoritative for the other.
+- **TripDist** and **ODO distance** share a two-series line chart so their divergence can be inspected over time without treating either as authoritative for the other.
 - Add dedicated charts for trip count, total travel time and average distance per trip.
 - Drill charts down exactly one level: year → months, month → ISO weeks, week → days.
 - Keep day as the terminal statistics level; it deliberately has no one-point chart because per-trip day charts would require a different data model.
@@ -103,7 +103,7 @@ Trip-statistics drill-down charts.
 
 Hierarchical trip statistics plus calendar polish.
 
-- Add a bounded **Trip statistics** drill-down in the desktop card with levels **År → Month → Vecka → Dag**.
+- Add a bounded **Trip statistics** drill-down in the desktop card with levels **Year → Month → Week → Day**.
 - Only the selected statistics level is expanded; selectors are scoped to the chosen year/week.
 - Show the same core metrics at every level: Fuelio `TripDist`, ODO-checkpoint distance, trip count, total travel time and average distance per trip.
 - Keep `TripDist` and ODO as deliberately separate measurements; do not force them to match.
@@ -137,7 +137,7 @@ Read-only Fuelio calendar.
 - Add a `calendar` platform alongside the existing 42 sensors. The integration now exposes one read-only Fuelio calendar entity without adding sensor entities.
 - Project non-template, non-income Fuelio `Costs` rows dated today or later into bounded all-day Home Assistant calendar events.
 - Keep calendar data privacy-safe: only date, sanitized cost category, amount and coarse event kind are retained. Fuelio cost titles, notes, internal IDs, registration/VIN-like vehicle data and raw rows are not exposed.
-- Mark categories containing Underhåll, Service or Reparation as maintenance events; other rows remain general expense events.
+- Mark categories containing the Fuelio category names `Underhåll`, `Service` or `Reparation` as maintenance events; other rows remain general expense events.
 - Cap the in-memory calendar projection at 256 events.
 - Deliberately exclude `isTemplate=1` rows until Fuelio template/realized-obligation semantics are validated.
 - Deliberately exclude estimated next fuel-up from the calendar in b3 because that forecast can move as range and driving pace change.
@@ -222,7 +222,7 @@ Service & maintenance cost visibility fix.
   - the month selected in **Kostnader**
   - the year selected in **Annual overview**
   - the full imported period
-- Match Fuelio category names containing **Underhåll**, **Service** or **Reparation**; unrelated categories such as `Tjänster` are not included.
+- Match Fuelio category names containing the Fuelio category names `Underhåll`, `Service` or `Reparation`; unrelated categories such as the source category `Tjänster` are not included.
 - Existing booked cost totals are unchanged; this release fixes presentation/visibility only.
 - No new sensors or unique-ID/entity-ID changes. Sensor count remains **42**.
 - Frontend version becomes **2026.10.0b14**.
@@ -332,7 +332,7 @@ Experimental period analytics release based on the beta.5 dashboard tests.
 - Add six read-only SEK/km sensors: fuel and all actual spending for current calendar month, calendar year, and full imported history. Denominator is **logged trip km in the SAME period**, not total vehicle mileage. No logged km yields `unknown`, not zero. A new valid ZIP updates ratios on the existing five-minute polling cycle.
 - Add current month and year fill-up count sensors; lifetime fill-up count remains existing stable sensor. Future-dated fill-ups are not counted.
 - Parse optional `CostCategories` (`CostTypeID` → `Name`) and join actual `Costs.CostTypeID`; exclude templates, incomes and future expenses. Unknown category ID or missing section is `Okategoriserat`. Expose only aggregated name/amount, never private cost titles, notes, category internal IDs or raw rows.
-- Monthly cost breakdown attributes now include logged km, fuel-ups, both cost/km ratios and category totals; add year aggregates and lifetime category totals. Attribute summaries are capped (120 months, 40 years, 20 category rows per group), with excess names combined under `Övriga kategorier`.
+- Monthly cost breakdown attributes now include logged km, fuel-ups, both cost/km ratios and category totals; add year aggregates and lifetime category totals. Attribute summaries are capped (120 months, 40 years, 20 category rows per group), with excess names combined under `Other categories`.
 - The card shows per-category expenses, six period cost/km tiles, and a separate month/year/lifetime fill-up section; no false whole-vehicle cost/km claim. Four-column mode now requires >=850px.
 - Preserve the existing 28 sensor IDs and unique IDs; eight new sensors bring the integration to **36 sensors**. Existing ZIP paths remain unchanged.
 
