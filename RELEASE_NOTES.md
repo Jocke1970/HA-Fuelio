@@ -4,8 +4,8 @@ Stable November 2026 release.
 
 Promoted from beta.11 after live Home Assistant validation of the complete desktop/mobile flow and final UI polish.
 
-- Stable dashboard architecture with compact summary expanders, Tank & räckvidd first, Resestatistik drill-down and inline graphs.
-- Resestatistik supports year → month → ISO week → day, with TripDist kept separate from ODO checkpoints and rolling 3-period averages on single-series charts.
+- Stable dashboard architecture with compact summary expanders, Tank & range first, Trip statistics drill-down and inline graphs.
+- Trip statistics supports year → month → ISO week → day, with TripDist kept separate from ODO checkpoints and rolling 3-period averages on single-series charts.
 - Read-only Fuelio calendar includes timed TripLog journeys plus sanitized current/future cost events.
 - Measured full→full fuel-economy windows feed the range model with safe fallbacks and manual current-tank calibration.
 - Top status chips are left-aligned, wrap cleanly and retain readable availability/sync/latest-trip hierarchy.
@@ -18,9 +18,9 @@ Promoted from beta.11 after live Home Assistant validation of the complete deskt
 Top status-chip polish before stable promotion.
 
 - Move the header status chips into a dedicated left-aligned row beneath the title.
-- Let the row wrap naturally from the left so **Senaste resa** no longer appears as an orphaned right-aligned chip on narrow layouts.
-- Give **Data tillgänglig** a subtle positive tint, keep **ZIP uppdaterad** as the primary neutral status, and visually tone down **Senaste resa**.
-- Keep all dashboard calculations, overview ordering, Resestatistik and entity contracts unchanged.
+- Let the row wrap naturally from the left so **Latest trip** no longer appears as an orphaned right-aligned chip on narrow layouts.
+- Give **Data available** a subtle positive tint, keep **ZIP updated** as the primary neutral status, and visually tone down **Latest trip**.
+- Keep all dashboard calculations, overview ordering, Trip statistics and entity contracts unchanged.
 - No new sensors, backend storage, write-back or data-model changes.
 - Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
 - Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b11`.
@@ -30,9 +30,9 @@ Top status-chip polish before stable promotion.
 
 Final beta layout polish before stable review.
 
-- Move the lifetime trip summary (**trip count · logged km · travel time**) into the top of **Resestatistik**.
+- Move the lifetime trip summary (**trip count · logged km · travel time**) into the top of **Trip statistics**.
 - Remove that summary from the gap between the top overview and the dashboard section list.
-- Keep the summary labelled **Sedan importstart** inside Resestatistik.
+- Keep the summary labelled **Since import start** inside Trip statistics.
 - Preserve the b9 overview order and compact summary expanders unchanged.
 - No new sensors, backend storage, write-back or data-model changes.
 - Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
@@ -43,11 +43,11 @@ Final beta layout polish before stable review.
 
 Overview order and odometer summary polish.
 
-- Move **Tank & räckvidd** to the first position in the top overview.
-- Convert **Mätarställning** into the same compact summary-expander model as the other overview groups.
-- Keep **Aktuell** odometer + **Månad** distance visible directly in the collapsed Mätarställning header.
-- Reveal monthly ODO detail, year distance and import-lifetime distance only when Mätarställning is expanded.
-- Keep Drivmedel, Bokförda utgifter and Beräknad körkostnad/km as compact summary expanders.
+- Move **Tank & range** to the first position in the top overview.
+- Convert **Odometer** into the same compact summary-expander model as the other overview groups.
+- Keep **Current** odometer + **Month** distance visible directly in the collapsed Odometer header.
+- Reveal monthly ODO detail, year distance and import-lifetime distance only when Odometer is expanded.
+- Keep Fuel, Booked expenses and Estimated driving cost/km as compact summary expanders.
 - No new sensors, backend storage, write-back or data-model changes.
 - Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
 - Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b9`.
@@ -57,13 +57,13 @@ Overview order and odometer summary polish.
 
 Compact overview summary expanders.
 
-- Convert **Drivmedel**, **Bokförda utgifter** and **Beräknad körkostnad/km** in the top overview into compact summary expanders.
+- Convert **Fuel**, **Booked expenses** and **Estimated driving cost/km** in the top overview into compact summary expanders.
 - Keep the most useful values visible directly in each collapsed header row:
-  - Drivmedel: latest reported consumption + running average.
+  - Fuel: latest reported consumption + running average.
   - Booked costs: current month + current year.
   - Estimated driving cost/km: current month + current year.
 - Expanding a group reveals secondary detail rows while preserving the same calculations and data source.
-- Keep **Mätarställning** as a normal always-visible overview card.
+- Keep **Odometer** as a normal always-visible overview card.
 - Keep all main dashboard sections collapsed by default as introduced in b7.
 - No new sensors, backend storage, write-back path or data-model changes.
 - Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
@@ -72,12 +72,12 @@ Compact overview summary expanders.
 
 # HA-Fuelio 2026.11.0b7 📊🚙
 
-Inline Resestatistik graphs and calmer dashboard defaults.
+Inline Trip statistics graphs and calmer dashboard defaults.
 
 - Start all main desktop dashboard sections collapsed by default.
-- Add a nested **Graf** expander inside **Resestatistik** that follows the same selected year/month/week/day period; no duplicate period selectors.
-- Keep **TripDist vs ODO-sträcka** as a clean two-line comparison without smoothing.
-- Render **Antal resor**, **Körtid** and **Snitt/resa** as actual-period bars with a rolling **3-period mean** line overlaid.
+- Add a nested **Chart** expander inside **Trip statistics** that follows the same selected year/month/week/day period; no duplicate period selectors.
+- Keep **TripDist vs ODO distance** as a clean two-line comparison without smoothing.
+- Render **Trip count**, **Travel time** and **Average/trip** as actual-period bars with a rolling **3-period mean** line overlaid.
 - The rolling window follows chart granularity automatically: year charts use months, month charts use ISO weeks, and week charts use days.
 - Keep day as the terminal statistics level; no per-trip one-point graph is invented.
 - Reuse the existing bounded ZIP-derived trip statistics and self-contained SVG renderer. No new sensors, storage, write-back or external chart dependency.
@@ -89,7 +89,7 @@ Inline Resestatistik graphs and calmer dashboard defaults.
 
 Trip-statistics drill-down charts.
 
-- Add clickable charts to **Resestatistik** for year, month and week levels.
+- Add clickable charts to **Trip statistics** for year, month and week levels.
 - **TripDist** and **ODO-sträcka** share a two-series line chart so their divergence can be inspected over time without treating either as authoritative for the other.
 - Add dedicated charts for trip count, total travel time and average distance per trip.
 - Drill charts down exactly one level: year → months, month → ISO weeks, week → days.
@@ -103,7 +103,7 @@ Trip-statistics drill-down charts.
 
 Hierarchical trip statistics plus calendar polish.
 
-- Add a bounded **Resestatistik** drill-down in the desktop card with levels **År → Månad → Vecka → Dag**.
+- Add a bounded **Trip statistics** drill-down in the desktop card with levels **År → Month → Vecka → Dag**.
 - Only the selected statistics level is expanded; selectors are scoped to the chosen year/week.
 - Show the same core metrics at every level: Fuelio `TripDist`, ODO-checkpoint distance, trip count, total travel time and average distance per trip.
 - Keep `TripDist` and ODO as deliberately separate measurements; do not force them to match.
@@ -191,12 +191,12 @@ Range-calibration persistence and setup robustness.
 
 Current-tank range calibration.
 
-- Add a **Kalibrera** button to **Tank & räckvidd**.
+- Add a **Calibrate** button to **Tank & range**.
 - Enter the vehicle computer's current remaining range in kilometres; HA-Fuelio derives a temporary L/100 km basis so the theoretical range matches that value at the calibration moment.
 - The calibrated consumption basis then continues to count range down normally as new odometer data arrives; the entered range is not frozen.
 - Persist the override locally in Home Assistant across integration reloads/restarts. Nothing is written back to Fuelio or the source ZIP.
 - Automatically discard the override on the next registered **primary-tank fill-up**, so new Fuelio fuel/distance information becomes authoritative again.
-- Add an explicit **Återställ automatisk** action while manual calibration is active.
+- Add an explicit **Restore automatic** action while manual calibration is active.
 - Forecast attributes expose automatic vs manual consumption basis and calibration state for transparent UI/status.
 - No new entities: sensor count remains **42**.
 - Frontend remains HACS-managed at `/fuelio/ha-fuelio-card.js`.
@@ -211,16 +211,16 @@ Permanent HACS-managed frontend delivery.
 - One-time migration: replace the existing Lovelace resource URL with `/fuelio/ha-fuelio-card.js` (JavaScript module), then future beta updates are HACS-only.
 - The legacy `/config/www/ha-fuelio-card.js` can be deleted after the resource has been switched and verified.
 - Do not auto-load the card with `add_extra_js_url`; keep it as a normal Lovelace resource to avoid frontend custom-element load-order races in panel views.
-- Sensor model remains unchanged at **42 entities**. The Service & underhåll fix from b14 is retained.
+- Sensor model remains unchanged at **42 entities**. The Service & maintenance fix from b14 is retained.
 
 # HA-Fuelio 2026.10.0b14 🔧
 
 Service & maintenance cost visibility fix.
 
-- Replace the placeholder-only **Service & underhåll** section with real cost summaries from existing Fuelio category aggregates.
+- Replace the placeholder-only **Service & maintenance** section with real cost summaries from existing Fuelio category aggregates.
 - Show maintenance/service/repair costs for:
   - the month selected in **Kostnader**
-  - the year selected in **Årsöversikt**
+  - the year selected in **Annual overview**
   - the full imported period
 - Match Fuelio category names containing **Underhåll**, **Service** or **Reparation**; unrelated categories such as `Tjänster` are not included.
 - Existing booked cost totals are unchanged; this release fixes presentation/visibility only.
@@ -252,7 +252,7 @@ Upgrade through HACS, restart Home Assistant, copy the updated `ha-fuelio-card.j
 
 Annual reporting on top of the beta.11 parser fix.
 
-- Add a full-width **Årsöversikt** section with an independent year selector (up to the existing 40-year bounded history).
+- Add a full-width **Annual overview** section with an independent year selector (up to the existing 40-year bounded history).
 - Annual headline metrics: observed ODO distance, logged trip count, mean logged trip length, purchased litres, fill-up count and average reported L/100 km.
 - Annual cost summary: booked fuel, non-fuel and total spending; booked total SEK/ODO-km; estimated consumed-fuel cost and estimated total SEK/km.
 - Annual fuel/efficiency summary: weighted actual average fuel price (booked fuel spend ÷ purchased litres), yearly min/max positive unit price, yearly min/max reported consumption and number of valid consumption observations.
@@ -280,8 +280,8 @@ Upgrade the integration through HACS to beta.11 and restart Home Assistant. No L
 Desktop-first UI refresh built on the validated beta.9 backend.
 
 - Redesign the Lovelace card for a dedicated wide dashboard: six top KPIs, denser desktop grids, stronger visual hierarchy, a wider costs/fuel composition and compact secondary sections.
-- Promote **Tank & räckvidd** to a spotlight panel with estimated fuel remaining, theoretical range, distance since latest fill-up, predicted next fill-up and a visual estimated tank-level bar.
-- Show **ZIP uppdaterad** prominently in the header. The timestamp comes from the existing `last_app_sync` sensor, i.e. the local ZIP modification time preserved from Drive by the tested rclone workflow.
+- Promote **Tank & range** to a spotlight panel with estimated fuel remaining, theoretical range, distance since latest fill-up, predicted next fill-up and a visual estimated tank-level bar.
+- Show **ZIP updated** prominently in the header. The timestamp comes from the existing `last_app_sync` sensor, i.e. the local ZIP modification time preserved from Drive by the tested rclone workflow.
 - Keep the same 42 backend sensors and beta.9 calculation model; this release is primarily frontend presentation plus a redraw fix.
 - Add the six beta.9 range/sync sensors to the card's change signature so a new ZIP timestamp/range value redraws the card even when unrelated Fuelio values do not change.
 - Collapse the records section by default to reduce vertical scrolling on desktop; detailed cost/fuel sections remain open.
@@ -297,7 +297,7 @@ Fuel-tank range forecasting and Fuelio source-sync visibility.
 - Range estimation uses the primary tank's exported capacity and the latest full fill-up as a calibration point. Later partial fill-ups add their actual litres; estimated consumption since calibration is subtracted using the rolling mean of up to the latest two valid reported L/100 km values. Remaining fuel is physically bounded to 0..tank capacity. A partial fill therefore does not make the estimate unavailable.
 - The next-fuel-up prediction divides theoretical remaining range by aggregate logged driving pace over up to the latest 30 calendar days. The predicted date represents **theoretical empty tank**, not a claim about when the driver will choose to refuel. Forecast attributes expose consumption basis/sample count, calibration date, partial-fill count, 30-day daily-distance basis and a normal/limited confidence label.
 - The new source-sync sensor uses the local ZIP file modification time. In the tested rclone Google Drive workflow, rclone preserves Drive's modification time, so this surfaces when Fuelio/Drive last changed the sync ZIP. It is intentionally separate from Home Assistant's own polling/read time.
-- The Lovelace card adds a current **Tank & räckvidd** overview panel and shows latest Fuelio sync in Versionsinformation. The old notice claiming range was not modelled is removed. Frontend version is beta.9.
+- The Lovelace card adds a current **Tank & range** overview panel and shows latest Fuelio sync in Versionsinformation. The old notice claiming range was not modelled is removed. Frontend version is beta.9.
 - Existing 36 entity unique IDs remain unchanged; beta.9 only adds new keys. Raw trips, coordinates, VIN/plate, notes and source rows remain private and are not exposed.
 - Google Drive downloading remains an external transport concern (for example the tested Rclone Backup add-on); HA-Fuelio itself still reads a local ZIP and stays read-only.
 
