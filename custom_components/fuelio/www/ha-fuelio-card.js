@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b7 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b8 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b7";
+  const CARD_VERSION = "2026.11.0b8";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -79,6 +79,14 @@ const ENTITY_SLUGS = Object.freeze({
     .overview { display:grid; grid-template-columns:1fr; gap:12px; }
     .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
     .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
+    .overview-expander { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
+    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:14px 15px; display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px; text-align:left; font:inherit; cursor:pointer; }
+    .overview-expander>button:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
+    .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; }
+    .overview-summary { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:4px 10px; color:var(--secondary-text-color,#68727d); font-size:.7rem; text-align:right; }
+    .overview-summary strong { color:var(--primary-text-color,#202124); font-size:.78rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .overview-chevron { font-weight:800; }
+    .overview-expander-body { padding:0 15px 12px; }
     .overview-row { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 10px; padding:8px 0; border-top:1px solid var(--divider-color,#e2e4e8); }
     .overview-row:first-of-type { border-top:0; }
     .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.75rem; }
@@ -212,6 +220,7 @@ const ENTITY_SLUGS = Object.freeze({
       this._tripDay = null;
       this._tripGraphOpen = false;
       this._tripGraphMetric = "distance";
+      this._overviewOpen = { fuel: false, booked: false, drivecost: false };
       this._chart = null;
       this._rangeDialog = false;
       this._rangeError = "";
@@ -253,6 +262,13 @@ const ENTITY_SLUGS = Object.freeze({
         const isClose = close?.dataset && Object.prototype.hasOwnProperty.call(close.dataset, "chartClose");
         if (isClose || event.target?.classList?.contains?.("chart-backdrop")) {
           this._chart = null;
+          this._render();
+          return;
+        }
+        const overviewToggle = event.target.closest?.("[data-overview-section]");
+        const overviewSection = overviewToggle?.dataset?.overviewSection;
+        if (overviewSection && Object.prototype.hasOwnProperty.call(this._overviewOpen, overviewSection)) {
+          this._overviewOpen[overviewSection] = !this._overviewOpen[overviewSection];
           this._render();
           return;
         }
@@ -824,6 +840,13 @@ const ENTITY_SLUGS = Object.freeze({
       return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
     }
+    _overviewExpander(id, icon, title, summaries, rows) {
+      const open = this._overviewOpen[id] === true;
+      const summary = summaries.map(([label, value]) => `<span>${esc(label)} <strong>${esc(value)}</strong></span>`).join("");
+      const body = rows.map(([label, value, note]) =>
+        `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("");
+      return `<section class="overview-expander"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-summary">${summary}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body">${body}</div>` : ""}</section>`;
+    }
     _rangeServiceEntity() {
       return this._resolveId("estimated_range_remaining_km") || this._config?.entity || null;
     }
@@ -963,19 +986,31 @@ const ENTITY_SLUGS = Object.freeze({
           ["I år", decimal(currentYearData?.km, "km"), currentYearData?.odo_coverage === "partial_start" ? "Delperiod" : ""],
           ["Sedan importstart", decimal(aggregate.lifetime_odometer_km, "km")]
         ])}
-        ${this._panel("⛽", "Drivmedel", [
+        ${this._overviewExpander("fuel", "⛽", "Drivmedel", [
           ["Senaste", decimal(this._value("last_reported_consumption"), "L/100 km")],
+          ["Snitt", decimal(aggregate.latest_two_consumption, "L/100 km")]
+        ], [
           ["Löpande snitt", decimal(aggregate.latest_two_consumption, "L/100 km"), `${aggregate.latest_two_consumption_count || 0} giltiga tankningar`],
           ["Tankat denna månad", decimal(nowMonth?.litres, "L")],
           ["Tankat i år", decimal(currentYearData?.litres, "L")]
         ])}
-        ${this._panel("💳", "Bokförda utgifter", [
-          ["Denna månad", kroner(nowMonth?.total)],
-          ["Innevarande år", kroner(currentYearData?.total)]
+        ${this._overviewExpander("booked", "💳", "Bokförda utgifter", [
+          ["Månad", kroner(nowMonth?.total)],
+          ["År", kroner(currentYearData?.total)]
+        ], [
+          ["Bränsle · månad", kroner(nowMonth?.fuel)],
+          ["Övrigt · månad", kroner(nowMonth?.other)],
+          ["Bränsle · år", kroner(currentYearData?.fuel)],
+          ["Övrigt · år", kroner(currentYearData?.other)]
         ])}
-        ${this._panel("📏", "Beräknad körkostnad/km", [
+        ${this._overviewExpander("drivecost", "📏", "Beräknad körkostnad/km", [
+          ["Månad", decimal(nowMonth?.estimated_total_per_km, "kr/km")],
+          ["År", decimal(currentYearData?.estimated_total_per_km, "kr/km")]
+        ], [
           ["Denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth)],
-          ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)]
+          ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)],
+          ["Beräknat bränsle · månad", kroner(nowMonth?.estimated_fuel)],
+          ["Beräknat bränsle · år", kroner(currentYearData?.estimated_fuel)]
         ])}
         ${this._rangePanel(forecast)}
       </div>`;
