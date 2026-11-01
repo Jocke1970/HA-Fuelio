@@ -389,7 +389,7 @@ const ENTITY_SLUGS = Object.freeze({
       // React only when Fuelio values change, not on every unrelated HA state update.
       const signature = sensorKeys.map((key) => {
         const entry = this._state(key);
-        return entry ? `${entry.state}|${entry.last_updated || ""}|${key === "monthly_cost_breakdown" ? JSON.stringify([entry.attributes?.months || [], entry.attributes?.years || [], entry.attributes?.categories_all || []]) : (entry.attributes?.recorded_on || "")}` : "missing";
+        return entry ? `${entry.state}|${entry.last_updated || ""}|${key === "monthly_cost_breakdown" ? JSON.stringify([entry.attributes?.months || [], entry.attributes?.years || [], entry.attributes?.categories_all || [], entry.attributes?.trip_statistics || {}]) : (entry.attributes?.recorded_on || "")}` : "missing";
       }).join(";");
       if (signature === this._signature) return;
       this._signature = signature;
