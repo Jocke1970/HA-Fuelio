@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           version="$(python -c 'import json; print(json.load(open("custom_components/fuelio/manifest.json"))["version"])')"
-          if [[ ! "$version" =~ ^[0-9]{4}\.(0[1-9]|1[0-2])\.0b[0-9]+$ ]]; then
+          if [[ ! "$version" =~ ^[0-9]{4}\.(0[1-9]|1[0-2])\.[0-9]+b[0-9]+$ ]]; then
             echo "Skipping release: manifest version is $version"
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             exit 0
