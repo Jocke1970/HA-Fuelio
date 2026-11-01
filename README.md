@@ -61,7 +61,7 @@ After `/fuelio/ha-fuelio-card.js` has been verified, the old manual copy `/confi
 
 ## Privacy and limitations
 
-Backups may contain registration, VIN, GPS tracks and private notes. No raw backup, identifiable fixtures, coordinates, trip records, notes or secrets should enter this public repository. HA-Fuelio exposes only aggregates, but user-supplied cost *category names* are visible in local HA attributes. Previously registered entity IDs may still embed user-chosen identifying text; beta.9 does not rename them automatically. Backup imports do not backfill HA Recorder.
+Backups may contain registration, VIN, GPS tracks and private notes. No raw backup, identifiable fixtures, coordinates, trip records, notes or secrets should enter this public repository. HA-Fuelio sensors expose aggregates; the local read-only calendar may additionally expose sanitized user-entered cost/trip title, note and category text. GPS coordinates, route/place fields, registration/VIN-like vehicle data and raw source rows remain excluded. Previously registered entity IDs may still embed user-chosen identifying text; beta.9 does not rename them automatically. Backup imports do not backfill HA Recorder.
 
 Not implemented: built-in Google Drive/Dropbox transport, service schedules/reminders, actual per-trip consumption, multiple vehicles in one ZIP, nonmetric exports or stable release. Currency is labelled SEK for the configured profile, not independently verified from the export. Future expenses and refuellings are not booked as current spending.
 
