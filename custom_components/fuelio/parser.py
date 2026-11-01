@@ -1,0 +1,1022 @@
+"""Parse Fuelio's multi-section sync CSV without exposing raw vehicle records."""
+from __future__ import annotations
+
+import csv
+import hashlib
+from calendar import monthrange
+from bisect import bisect_left, bisect_right
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
+from io import StringIO
+from math import ceil
+from pathlib import Path
+from zipfile import BadZipFile, ZipFile
+
+MAX_ZIP_BYTES = 32 * 1024 * 1024
+MAX_CSV_BYTES = 64 * 1024 * 1024
+MAX_ROWS = 100_000
+MAX_MONTHS_IN_ATTRIBUTES = 120  # Bound recorder/state attribute size; newest ten years.
+MAX_CALENDAR_COST_EVENTS = 256  # Bound local read-only cost-calendar data.
+MAX_CALENDAR_TRIP_EVENTS = 256  # Bound local read-only trip-calendar data.
+MAX_TRIP_STATS_DAYS = 400
+MAX_TRIP_STATS_WEEKS = 160
+
+try:
+    from .fuel_economy import FuelEconomyEvent, compute_fuel_economy
+except ImportError:  # Pure parser tests load this file outside the HA package.
+    import importlib.util
+    import sys
+
+    _economy_path = Path(__file__).with_name("fuel_economy.py")
+    _economy_spec = importlib.util.spec_from_file_location(
+        "fuelio_economy_under_test", _economy_path
+    )
+    if _economy_spec is None or _economy_spec.loader is None:
+        raise
+    _economy_module = importlib.util.module_from_spec(_economy_spec)
+    sys.modules[_economy_spec.name] = _economy_module
+    _economy_spec.loader.exec_module(_economy_module)
+    FuelEconomyEvent = _economy_module.FuelEconomyEvent
+    compute_fuel_economy = _economy_module.compute_fuel_economy
+
+
+@dataclass(frozen=True, slots=True)
+class FuelioSnapshot:
+    """Sanitized local snapshot: no plate, VIN, GPS coordinates, routes or raw rows."""
+    vehicle_name: str
+    trip_count: int
+    trip_distance_km: float
+    trip_duration_hours: float
+    monthly_trip_distance_km: float
+    estimated_trip_cost: float
+    fuel_count: int
+    fuel_litres: float
+    fuel_cost: float
+    monthly_fuel_cost: float
+    last_fuel_price: float | None
+    last_reported_consumption: float | None
+    last_fillup_date: date | None
+    expense_count: int
+    other_expenses: float
+    monthly_other_expenses: float
+    upcoming_expense_count: int
+    total_actual_cost: float
+    last_trip_date: date | None
+    latest_odometer_km: float | None
+    fuel_price_min_year: float | None
+    fuel_price_max_year: float | None
+    fuel_price_min_all: float | None
+    fuel_price_max_all: float | None
+    consumption_min_year: float | None
+    consumption_max_year: float | None
+    consumption_min_all: float | None
+    consumption_max_all: float | None
+    record_dates: dict[str, str]
+    monthly_cost_history: tuple[dict[str, float | str], ...]
+    monthly_history_truncated: bool
+    odometer_lifetime_km: float | None
+    odometer_lifetime_coverage: dict
+    estimated_lifetime: dict
+    latest_two_consumption: float | None
+    latest_two_consumption_count: int
+    yearly_cost_history: tuple[dict, ...]
+    all_cost_categories: tuple[dict, ...]
+    fuel_count_month: int
+    fuel_count_year: int
+    fuel_cost_per_km_month: float | None
+    total_cost_per_km_month: float | None
+    fuel_cost_per_km_year: float | None
+    total_cost_per_km_year: float | None
+    fuel_cost_per_km_all: float | None
+    total_cost_per_km_all: float | None
+    distance_since_last_fillup_km: float | None
+    estimated_fuel_remaining_l: float | None
+    estimated_range_remaining_km: float | None
+    estimated_days_to_next_fillup: int | None
+    estimated_next_fillup_date: date | None
+    last_app_sync: datetime | None
+    fuel_forecast: dict
+    upcoming_calendar_events: tuple[dict, ...]
+    trip_statistics: dict
+
+
+def range_calibration_consumption(snapshot: FuelioSnapshot, target_range_km: float) -> float:
+    """Return the temporary L/100 km basis required to match a dashboard range."""
+    target = Decimal(str(target_range_km))
+    if not target.is_finite() or target <= 0:
+        raise ValueError("Calibration range must be greater than zero")
+    meta = snapshot.fuel_forecast
+    available_raw = meta.get("fuel_available_since_calibration_l")
+    distance_raw = meta.get("distance_since_calibration_km")
+    if available_raw is None or distance_raw is None:
+        raise ValueError("Fuel range forecast is not calibrated from a full tank")
+    available = Decimal(str(available_raw))
+    distance = Decimal(str(distance_raw))
+    if available <= 0 or distance < 0:
+        raise ValueError("Fuel range calibration basis is unavailable")
+    consumption = available * 100 / (distance + target)
+    if consumption <= 0 or consumption > 100:
+        raise ValueError("Calibration would produce an invalid consumption value")
+    return round(float(consumption), 4)
+
+
+def apply_range_calibration(
+    snapshot: FuelioSnapshot,
+    consumption_l_per_100km: float,
+    *,
+    target_range_km: float | None = None,
+    calibrated_at: str | None = None,
+    today: date | None = None,
+) -> FuelioSnapshot:
+    """Apply a persisted current-tank calibration without changing Fuelio source data."""
+    today = today or date.today()
+    meta = dict(snapshot.fuel_forecast)
+    available_raw = meta.get("fuel_available_since_calibration_l")
+    distance_raw = meta.get("distance_since_calibration_km")
+    capacity_raw = meta.get("tank_capacity_l")
+    if available_raw is None or distance_raw is None or capacity_raw is None:
+        raise ValueError("Fuel range calibration basis is unavailable")
+    available = Decimal(str(available_raw))
+    distance = Decimal(str(distance_raw))
+    capacity = Decimal(str(capacity_raw))
+    consumption = Decimal(str(consumption_l_per_100km))
+    if consumption <= 0 or consumption > 100 or available <= 0 or distance < 0 or capacity <= 0:
+        raise ValueError("Fuel range calibration values are invalid")
+
+    raw_remaining = available - distance * consumption / 100
+    remaining = min(capacity, max(Decimal(0), raw_remaining))
+    remaining_range = remaining / consumption * 100
+
+    average_daily_raw = meta.get("average_daily_distance_30d_km")
+    average_daily = Decimal(str(average_daily_raw)) if average_daily_raw is not None else Decimal(0)
+    days: int | None = None
+    next_date: date | None = None
+    if average_daily > 0:
+        days = ceil(float(remaining_range / average_daily))
+        next_date = today + timedelta(days=days)
+
+    automatic_basis = meta.get("automatic_consumption_basis_l_per_100km")
+    if automatic_basis is None:
+        automatic_basis = meta.get("consumption_basis_l_per_100km")
+    meta.update({
+        "confidence": "manual",
+        "automatic_consumption_basis_l_per_100km": automatic_basis,
+        "consumption_basis_l_per_100km": round(float(consumption), 4),
+        "consumption_basis_source": "manual_range_calibration",
+        "manual_calibration_active": True,
+        "manual_calibrated_target_range_km": round(float(target_range_km), 1) if target_range_km is not None else None,
+        "manual_calibrated_at": calibrated_at,
+    })
+    return replace(
+        snapshot,
+        estimated_fuel_remaining_l=round(float(remaining), 2),
+        estimated_range_remaining_km=round(float(remaining_range), 1),
+        estimated_days_to_next_fillup=days,
+        estimated_next_fillup_date=next_date,
+        fuel_forecast=meta,
+    )
+
+
+def _number(raw: str, *, default: Decimal | None = None) -> Decimal | None:
+    if not raw.strip():
+        return default
+    try:
+        value = Decimal(raw.strip())
+    except InvalidOperation as exc:
+        raise ValueError("Invalid numeric field in Fuelio backup") from exc
+    if not value.is_finite():
+        raise ValueError("Non-finite numeric field in Fuelio backup")
+    return value
+
+
+def _nonnegative(raw: str, *, default: Decimal | None = None) -> Decimal | None:
+    value = _number(raw, default=default)
+    if value is not None and value < 0:
+        raise ValueError("Negative field in Fuelio backup")
+    return value
+
+
+def _datetime(raw: str) -> datetime:
+    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw.strip(), pattern)
+        except ValueError:
+            pass
+    raise ValueError("Invalid date in Fuelio backup")
+
+
+def _date(raw: str) -> date:
+    return _datetime(raw).date()
+
+def _cost_date(raw: str) -> date:
+    """Parse a Fuelio cost date, tolerating its month-end recurrence bug only."""
+    try:
+        return _date(raw)
+    except ValueError as original:
+        token = raw.strip().split(" ", 1)[0]
+        parts = token.split("-")
+        if len(parts) != 3:
+            raise original
+        try:
+            year, month, day = (int(part) for part in parts)
+            last_day = monthrange(year, month)[1]
+        except (ValueError, TypeError):
+            raise original
+        # Fuelio can materialize a recurring expense on day 29-31 even when
+        # that day does not exist in the target month (e.g. 2026-09-31).
+        # Clamp only this narrow month-end case; all other dates stay strict.
+        if 29 <= day <= 31 and day > last_day:
+            return date(year, month, last_day)
+        raise original
+
+
+def _section_rows(text: str) -> dict[str, list[dict[str, str]]]:
+    reader = csv.reader(StringIO(text, newline=""), strict=True)
+    sections: dict[str, list[dict[str, str]]] = {}
+    section: str | None = None
+    header: list[str] | None = None
+    try:
+        for index, row in enumerate(reader):
+            if index > MAX_ROWS:
+                raise ValueError("Too many rows in Fuelio backup")
+            if not row or not any(cell.strip() for cell in row):
+                continue
+            if len(row) == 1 and row[0].strip().startswith("## "):
+                section = row[0].strip()[3:]
+                if section in sections:
+                    raise ValueError("Duplicate section in Fuelio backup")
+                sections[section] = []
+                header = None
+                continue
+            if section is None:
+                raise ValueError("Fuelio section header missing")
+            if header is None:
+                header = [cell.strip() for cell in row]
+                if len(set(header)) != len(header) or not all(header):
+                    raise ValueError("Invalid Fuelio column headers")
+                continue
+            if len(row) != len(header):
+                raise ValueError("Fuelio row has incorrect number of columns")
+            sections[section].append(dict(zip(header, row, strict=True)))
+    except csv.Error as exc:
+        raise ValueError("Invalid Fuelio CSV") from exc
+    return sections
+
+
+def _record(records: list[tuple[Decimal, date]], *, lowest: bool) -> tuple[Decimal | None, str | None]:
+    """Pick a real positive observation; on ties use its newest date."""
+    if not records:
+        return None, None
+    boundary = (min if lowest else max)(value for value, _ in records)
+    day = max(day for value, day in records if value == boundary)
+    return boundary, day.isoformat()
+
+
+def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
+    """Build aggregates from a metric Fuelio export; never preserve source rows."""
+    today = today or date.today()
+    sections = _section_rows(text)
+    if len(sections.get("Vehicle", [])) != 1:
+        raise ValueError("Expected one vehicle per Fuelio backup")
+    if any(key not in sections for key in ("Log", "Costs", "TripLog")):
+        raise ValueError("Missing Fuelio data section")
+    vehicle = sections["Vehicle"][0]
+    name = "Fuelio vehicle"  # Vehicle.Name could contain a registration; discard it.
+    if vehicle.get("DistUnit") != "0" or vehicle.get("FuelUnit") != "0":
+        raise ValueError("This version supports metric Fuelio backups only")
+
+    trip_count = 0
+    trip_m = Decimal(0)
+    month_trip_m = Decimal(0)
+    duration_seconds = Decimal(0)
+    estimated_trip_cost = Decimal(0)
+    last_trip: date | None = None
+    odometers: list[Decimal] = []
+    # Date-stamped odometer checkpoints, from tankings and OBD trip boundaries.
+    # No trip coordinates, routes, vehicle identifiers or raw rows are retained.
+    odometer_by_day: dict[date, list[Decimal]] = {}
+
+    def observe_odometer(day: date, value: Decimal | None) -> None:
+        if value is not None and value > 0 and day <= today:
+            odometers.append(value)
+            odometer_by_day.setdefault(day, []).append(value)
+    logged_km_by_month: dict[str, Decimal] = {}
+    trip_count_by_month: dict[str, int] = {}
+    logged_km_total = Decimal(0)
+    logged_km_by_day: dict[date, Decimal] = {}
+    trip_count_by_day: dict[date, int] = {}
+    trip_duration_by_day: dict[date, Decimal] = {}
+    trip_calendar_events: list[dict] = []
+    for trip in sections["TripLog"]:
+        end_dt = _datetime(trip["EndDate"])
+        day = end_dt.date()
+        distance = _nonnegative(trip["TripDist"], default=Decimal(0))
+        duration = _nonnegative(trip["TripDuration"], default=Decimal(0))
+        estimate = _nonnegative(trip["TripCost"], default=Decimal(0))
+        assert distance is not None and duration is not None and estimate is not None
+        trip_count += 1
+        trip_m += distance
+        duration_seconds += duration
+        estimated_trip_cost += estimate
+        if day <= today:
+            month_key = day.strftime("%Y-%m")
+            km = distance / 1000
+            logged_km_by_month[month_key] = logged_km_by_month.get(month_key, Decimal(0)) + km
+            trip_count_by_month[month_key] = trip_count_by_month.get(month_key, 0) + 1
+            logged_km_total += km
+            logged_km_by_day[day] = logged_km_by_day.get(day, Decimal(0)) + km
+            trip_count_by_day[day] = trip_count_by_day.get(day, 0) + 1
+            trip_duration_by_day[day] = trip_duration_by_day.get(day, Decimal(0)) + duration
+        if (day.year, day.month) == (today.year, today.month) and day <= today:
+            month_trip_m += distance
+        if day <= today and (last_trip is None or day > last_trip):
+            last_trip = day
+        # StartOdo may legitimately be 0/blank when Fuelio derives the trip start
+        # from the previous EndOdo. TripDist remains the trip-distance source;
+        # EndOdo is kept as an odometer checkpoint, never as a GPS substitute.
+        start_raw = trip.get("StartDate", "").strip()
+        start_dt = _datetime(start_raw) if start_raw else end_dt - timedelta(seconds=float(duration))
+        start_day = start_dt.date()
+        start_odo = _nonnegative(trip.get("StartOdo", ""))
+        end_odo = _nonnegative(trip.get("EndOdo", ""))
+        if start_day <= day and day <= today:
+            observe_odometer(start_day, start_odo)
+            observe_odometer(day, end_odo)
+
+        # Keep only a bounded, sanitized local calendar projection. User-entered
+        # title/note/category are useful in the local HA calendar, but GPS names,
+        # coordinates, route geometry, internal IDs and raw TripLog rows are not.
+        if day <= today and start_dt <= end_dt:
+            trip_title = " ".join((trip.get("title") or trip.get("Title") or "").split())[:96] or "Resa"
+            trip_note = " ".join((trip.get("TripNote") or "").split())[:240] or None
+            trip_calendar_events.append({
+                "kind": "trip",
+                "start": start_dt.isoformat(timespec="seconds"),
+                "end": end_dt.isoformat(timespec="seconds"),
+                "title": trip_title,
+                "distance_km": round(float(distance / 1000), 3),
+                "duration_minutes": round(float(duration / 60), 1),
+                "end_odometer_km": round(float(end_odo), 1) if end_odo is not None and end_odo > 0 else None,
+                "note": trip_note,
+            })
+
+    # Monthly values are aggregate-only and capped before exposing as HA attributes.
+    monthly: dict[str, dict[str, Decimal]] = {}
+
+    def bucket(day: date) -> dict[str, Decimal]:
+        return monthly.setdefault(day.strftime("%Y-%m"), {"fuel": Decimal(0), "other": Decimal(0), "litres": Decimal(0)})
+
+    fuel_count = 0
+    fuel_ups_by_month: dict[str, int] = {}
+    litres = Decimal(0)
+    fuel_cost = Decimal(0)
+    month_fuel_cost = Decimal(0)
+    last_fillup: date | None = None
+    last_price: Decimal | None = None
+    last_consumption: Decimal | None = None
+    last_consumption_day: date | None = None
+    valid_prices: list[tuple[Decimal, date]] = []
+    valid_consumptions: list[tuple[Decimal, date]] = []
+    tank_capacity = _nonnegative(vehicle.get("Tank1Capacity", ""))
+    fuel_events: list[dict] = []
+    for fillup in sections["Log"]:
+        day = _date(fillup["Data"])
+        volume = _nonnegative(fillup["Fuel (litres)"], default=Decimal(0))
+        cost = _nonnegative(fillup["Price (optional)"], default=Decimal(0))
+        assert volume is not None and cost is not None
+        if day > today:
+            continue
+        fuel_count += 1
+        month_key = day.strftime("%Y-%m")
+        fuel_ups_by_month[month_key] = fuel_ups_by_month.get(month_key, 0) + 1
+        litres += volume
+        fuel_cost += cost
+        bucket(day)["fuel"] += cost
+        bucket(day)["litres"] += volume
+        if (day.year, day.month) == (today.year, today.month):
+            month_fuel_cost += cost
+        fill_odo = _nonnegative(fillup.get("Odo (km)", ""))
+        observe_odometer(day, fill_odo)
+        fuel_events.append({
+            "day": day,
+            "odo": fill_odo,
+            "volume": volume,
+            "full": fillup.get("Full", "").strip() == "1",
+            "tank": fillup.get("TankNumber", "1").strip() or "1",
+            "fuel_type": fillup.get("FuelType", "").strip(),
+            "missed": fillup.get("Missed", "").strip() in {"1", "1.0"},
+            "exclude_distance": fillup.get("ExcludeDistance", "").strip() not in {"", "0", "0.0"},
+        })
+        reported = _nonnegative(fillup.get("l/100km (optional)", ""))
+        if reported is not None and (last_consumption_day is None or day > last_consumption_day):
+            last_consumption_day = day
+            last_consumption = reported
+        # Zero, empty or otherwise missing measurements are not fuel-price/consumption records.
+        if reported is not None and reported > 0:
+            valid_consumptions.append((reported, day))
+        price = _nonnegative(fillup.get("VolumePrice", ""))
+        effective_price = price if price is not None and price > 0 else (cost / volume if volume and cost else None)
+        if volume > 0 and effective_price is not None and effective_price > 0:
+            valid_prices.append((effective_price, day))
+        if last_fillup is None or day > last_fillup:
+            last_fillup = day
+            last_price = price if price is not None and price > 0 else (cost / volume if volume else None)
+
+    # CostCategories maps private internal IDs to display labels. IDs and raw
+    # source rows remain private; sanitized user-facing title/note text may be
+    # projected into the local read-only HA calendar.
+    category_names: dict[str, str] = {}
+    for category in sections.get("CostCategories", []):
+        identifier = category.get("CostTypeID", "").strip()
+        if not identifier:
+            continue
+        if identifier in category_names:
+            raise ValueError("Duplicate Fuelio cost category ID")
+        label = " ".join(category.get("Name", "").split())[:64]
+        category_names[identifier] = label or "Okategoriserat"
+    expense_categories_by_month: dict[str, dict[str, Decimal]] = {}
+    expense_count = 0
+    expenses = Decimal(0)
+    month_expenses = Decimal(0)
+    upcoming = 0
+    calendar_events: list[dict] = []
+    for record in sections["Costs"]:
+        if record.get("isTemplate", "0").strip() == "1" or record.get("isIncome", "0").strip() == "1":
+            continue
+        day = _cost_date(record["Date"])
+        amount = _nonnegative(record["Cost"], default=Decimal(0))
+        assert amount is not None
+        label = category_names.get(record.get("CostTypeID", "").strip(), "Okategoriserat")
+        expense_count += 1
+
+        # Keep a bounded local calendar projection. Title and note are sanitized
+        # user-facing text; internal IDs, vehicle identifiers and raw rows stay out.
+        if day >= today:
+            normalized = label.casefold()
+            kind = "maintenance" if any(
+                token in normalized for token in ("underhåll", "service", "reparation")
+            ) else "expense"
+            cost_title = " ".join(
+                (record.get("CostTitle") or record.get("Title") or "").split()
+            )[:96] or None
+            cost_note = " ".join((record.get("Notes") or "").split())[:240] or None
+            calendar_events.append({
+                "date": day.isoformat(),
+                "category": label,
+                "amount": round(float(amount), 2),
+                "kind": kind,
+                "title": cost_title,
+                "note": cost_note,
+            })
+
+        if day > today:
+            upcoming += 1
+            continue
+        expenses += amount
+        bucket(day)["other"] += amount
+        month_key = day.strftime("%Y-%m")
+        categories = expense_categories_by_month.setdefault(month_key, {})
+        categories[label] = categories.get(label, Decimal(0)) + amount
+        if (day.year, day.month) == (today.year, today.month):
+            month_expenses += amount
+
+    calendar_events.sort(key=lambda item: (item["date"], item["category"], item["amount"]))
+    calendar_events = calendar_events[:MAX_CALENDAR_COST_EVENTS]
+    # Retain the most recent trip events, then return one chronological mixed
+    # projection for Home Assistant's calendar range queries.
+    trip_calendar_events.sort(key=lambda item: (item["end"], item["start"]), reverse=True)
+    trip_calendar_events = trip_calendar_events[:MAX_CALENDAR_TRIP_EVENTS]
+    calendar_events.extend(trip_calendar_events)
+    calendar_events.sort(key=lambda item: item.get("start") or item.get("date") or "")
+
+    def rounded(value: Decimal, places: int = 2) -> float:
+        return round(float(value), places)
+
+    extrema: dict[str, float | None] = {}
+    record_dates: dict[str, str] = {}
+    for prefix, records in (("fuel_price", valid_prices), ("consumption", valid_consumptions)):
+        this_year = [(value, day) for value, day in records if day.year == today.year]
+        for suffix, subset in (("year", this_year), ("all", records)):
+            for label, lowest in (("min", True), ("max", False)):
+                key = f"{prefix}_{label}_{suffix}"
+                value, recorded_on = _record(subset, lowest=lowest)
+                extrema[key] = rounded(value, 3) if value is not None and prefix == "fuel_price" else (rounded(value) if value is not None else None)
+                if recorded_on is not None:
+                    record_dates[key] = recorded_on
+
+    # A period uses the most recent ODO checkpoint BEFORE its first day and
+    # the latest checkpoint inside that period. Thus missing a reading on the
+    # month's last day does not invalidate a month, and successive months share
+    # a consistent boundary checkpoint. This is observed, not exact-midnight km.
+    # First imported period has no earlier checkpoint: measure from its first
+    # in-period reading and explicitly mark incomplete coverage.
+    odometer_days = sorted(odometer_by_day)
+
+    def odometer_distance(start: date | None, end: date) -> tuple[Decimal | None, dict]:
+        in_period = [day for day in odometer_days if (start is None or day >= start) and day <= end]
+        if not in_period:
+            return None, {"odo_coverage": "unavailable"}
+        last_day = in_period[-1]
+        last = max(odometer_by_day[last_day])
+        prior = [day for day in odometer_days if start is not None and day < start]
+        if prior:
+            first_day = prior[-1]
+            first = max(odometer_by_day[first_day])
+            coverage = "prior_checkpoint"
+        else:
+            first_day = in_period[0]
+            first = min(odometer_by_day[first_day])
+            coverage = "partial_start" if start is not None else "import_start"
+        if last < first:
+            return None, {"odo_coverage": "invalid_rollback"}
+        # A single reading cannot establish distance. Two checkpoints with the
+        # same value legitimately establish zero distance, not a cost/km value.
+        if first_day == last_day and len(odometer_by_day[first_day]) < 2:
+            return None, {"odo_coverage": "insufficient_readings"}
+        return last - first, {"odo_coverage": coverage,
+                              "odo_start_on": first_day.isoformat(),
+                              "odo_end_on": last_day.isoformat()}
+
+    def per_odometer_km(cost: Decimal, km: Decimal | None) -> float | None:
+        return rounded(cost / km, 3) if km is not None and km > 0 else None
+
+    def trip_stats_period(start: date, end: date, *, key: str, value: str) -> dict:
+        days = [day for day in logged_km_by_day if start <= day <= end]
+        logged = sum((logged_km_by_day[day] for day in days), Decimal(0))
+        count = sum(trip_count_by_day.get(day, 0) for day in days)
+        duration = sum((trip_duration_by_day.get(day, Decimal(0)) for day in days), Decimal(0))
+        odo_km, coverage = odometer_distance(start, end)
+        row = {
+            key: value,
+            "trip_km": rounded(logged, 3),
+            "trip_count": count,
+            "duration_hours": rounded(duration / 3600, 3),
+            "average_trip_km": rounded(logged / count, 3) if count else None,
+            "odo_km": rounded(odo_km, 3) if odo_km is not None else None,
+        }
+        row.update(coverage)
+        return row
+
+    trip_days = sorted((day for day in logged_km_by_day if day <= today), reverse=True)
+    trip_years = sorted({day.year for day in trip_days}, reverse=True)
+    trip_months = sorted({(day.year, day.month) for day in trip_days}, reverse=True)
+    trip_weeks = sorted(
+        {(iso.year, iso.week) for day in trip_days for iso in [day.isocalendar()]},
+        reverse=True,
+    )
+
+    trip_stats_years = []
+    for year in trip_years[:40]:
+        trip_stats_years.append(
+            trip_stats_period(
+                date(year, 1, 1),
+                min(today, date(year, 12, 31)),
+                key="year",
+                value=str(year),
+            )
+        )
+
+    trip_stats_months = []
+    for year, month in trip_months[:MAX_MONTHS_IN_ATTRIBUTES]:
+        last = monthrange(year, month)[1]
+        trip_stats_months.append(
+            trip_stats_period(
+                date(year, month, 1),
+                min(today, date(year, month, last)),
+                key="month",
+                value=f"{year:04d}-{month:02d}",
+            )
+        )
+
+    trip_stats_weeks = []
+    for iso_year, iso_week in trip_weeks[:MAX_TRIP_STATS_WEEKS]:
+        week_start = date.fromisocalendar(iso_year, iso_week, 1)
+        week_end = min(today, week_start + timedelta(days=6))
+        row = trip_stats_period(
+            week_start,
+            week_end,
+            key="week",
+            value=f"{iso_year:04d}-W{iso_week:02d}",
+        )
+        row["start"] = week_start.isoformat()
+        row["end"] = week_end.isoformat()
+        trip_stats_weeks.append(row)
+
+    trip_stats_days = []
+    for day in trip_days[:MAX_TRIP_STATS_DAYS]:
+        trip_stats_days.append(
+            trip_stats_period(day, day, key="date", value=day.isoformat())
+        )
+
+    trip_statistics = {
+        "years": tuple(trip_stats_years),
+        "months": tuple(trip_stats_months),
+        "weeks": tuple(trip_stats_weeks),
+        "days": tuple(trip_stats_days),
+        "distance_semantics": {
+            "trip_km": "Fuelio TripDist",
+            "odo_km": "odometer checkpoints",
+        },
+        "days_limit": MAX_TRIP_STATS_DAYS,
+        "weeks_limit": MAX_TRIP_STATS_WEEKS,
+    }
+
+    consumption_history = sorted(valid_consumptions, key=lambda item: item[1])
+    price_history = sorted(valid_prices, key=lambda item: item[1])
+    consumption_days = [day for _, day in consumption_history]
+    price_days = [day for _, day in price_history]
+    all_consumptions = [value for value, _ in consumption_history]
+
+    def estimate_rate(as_of: date) -> tuple[Decimal | None, int]:
+        """Fuel SEK/km as known at interval start; never look into the future."""
+        ci = bisect_right(consumption_days, as_of)
+        pi = bisect_right(price_days, as_of)
+        if ci == 0 or pi == 0:
+            return None, 0
+        recent = [value for value, _ in consumption_history[max(0, ci - 2):ci]]
+        return sum(recent, Decimal(0)) / len(recent) * price_history[pi - 1][0] / 100, len(recent)
+
+    def estimate_period(start: date | None, end: date, km: Decimal | None,
+                        odo_coverage: dict) -> dict:
+        """Integrate observed ODO intervals without repricing earlier driving.
+
+        Same-day ordering is unknown in the CSV; daily odometer maxima are the
+        observation boundaries, with the first daily minimum as import baseline.
+        Missing rate for ANY positive distance leaves whole-period estimate unknown.
+        """
+        result = {"estimated_fuel": None, "estimated_total": None,
+                  "estimated_fuel_per_km": None, "estimated_total_per_km": None,
+                  "estimate_coverage": odo_coverage.get("odo_coverage", "unavailable"),
+                  "estimate_rate_samples": 0}
+        if km is None or km <= 0:
+            return result
+        first_index = 0 if start is None else bisect_left(odometer_days, start)
+        last_index = bisect_right(odometer_days, end)
+        days = odometer_days[first_index:last_index]
+        if not days:
+            return result
+        prior_index = first_index - 1 if start is not None else -1
+        if prior_index >= 0:
+            cursor_day = odometer_days[prior_index]
+            cursor_odo = max(odometer_by_day[cursor_day])
+        else:
+            cursor_day = days[0]
+            cursor_odo = min(odometer_by_day[cursor_day])
+        estimated = Decimal(0)
+        samples = 2
+        observed = Decimal(0)
+        missing = False
+        for day in days:
+            reading = max(odometer_by_day[day])
+            if reading < cursor_odo:
+                result["estimate_coverage"] = "invalid_rollback"
+                return result
+            delta = reading - cursor_odo
+            if delta:
+                observed += delta
+                rate, count = estimate_rate(cursor_day)
+                if rate is None:
+                    missing = True
+                else:
+                    estimated += delta * rate
+                    samples = min(samples, count)
+            cursor_day, cursor_odo = day, reading
+        if observed != km or missing:
+            result["estimate_coverage"] = "missing_rate" if missing else "inconsistent_distance"
+            return result
+        result["estimated_fuel"] = rounded(estimated)
+        result["estimated_fuel_per_km"] = per_odometer_km(estimated, km)
+        result["estimate_rate_samples"] = samples
+        if samples == 1:
+            result["estimate_coverage"] = "one_consumption_value" if start is None else (
+                "partial_start_one_value" if odo_coverage.get("odo_coverage") == "partial_start" else "one_consumption_value")
+        return result
+
+    latest_values = all_consumptions[-2:]
+    latest_two_consumption = (sum(latest_values, Decimal(0)) / len(latest_values)) if latest_values else None
+
+    economy_events = [
+        FuelEconomyEvent(
+            day=event["day"],
+            odometer_km=event["odo"],
+            litres=event["volume"],
+            full=event["full"],
+            tank=event["tank"],
+            fuel_type=event["fuel_type"],
+            missed=event["missed"],
+            exclude_distance=event["exclude_distance"],
+        )
+        for event in fuel_events
+        if event["odo"] is not None
+    ]
+    economy_summary = compute_fuel_economy(
+        economy_events,
+        tank_capacity_l=tank_capacity,
+        tank="1",
+    )
+    measured_basis_raw = economy_summary.get("recent_consumption_l_per_100km")
+    if economy_summary.get("measured_windows", 0) > 0 and measured_basis_raw is not None:
+        automatic_consumption = Decimal(str(measured_basis_raw))
+        automatic_consumption_source = "measured_full_to_full_recent"
+        automatic_consumption_samples = int(economy_summary["measured_windows"])
+    else:
+        automatic_consumption = latest_two_consumption
+        automatic_consumption_source = "fuelio_latest_two"
+        automatic_consumption_samples = len(latest_values)
+
+    # Range forecast. A full primary-tank fill is a calibration point. Later
+    # partial fills add their recorded litres; driven distance consumes fuel at
+    # the rolling mean of the latest two valid reported consumption values.
+    # This deliberately stays aggregate-only and never exposes individual trips.
+    latest_odometer_value = max(odometers) if odometers else None
+    primary_events = sorted(
+        (event for event in fuel_events if event["tank"] == "1" and event["odo"] is not None),
+        key=lambda event: (event["day"], event["odo"]),
+    )
+    last_fill_event = primary_events[-1] if primary_events else None
+    distance_since_last_fillup: Decimal | None = None
+    if last_fill_event is not None and latest_odometer_value is not None:
+        if latest_odometer_value >= last_fill_event["odo"]:
+            distance_since_last_fillup = latest_odometer_value - last_fill_event["odo"]
+
+    estimated_fuel_remaining: Decimal | None = None
+    estimated_range_remaining: Decimal | None = None
+    estimated_days_to_next_fillup: int | None = None
+    estimated_next_fillup_date: date | None = None
+    latest_primary_fillup_marker = None
+    if last_fill_event is not None:
+        marker_payload = "|".join((
+            last_fill_event["day"].isoformat(),
+            str(last_fill_event["odo"]),
+            str(last_fill_event["volume"]),
+            "1" if last_fill_event["full"] else "0",
+        ))
+        latest_primary_fillup_marker = hashlib.sha256(marker_payload.encode("utf-8")).hexdigest()[:16]
+
+    forecast_meta: dict = {
+        "confidence": "unavailable",
+        "consumption_basis_l_per_100km": rounded(automatic_consumption, 3) if automatic_consumption is not None else None,
+        "consumption_samples": automatic_consumption_samples,
+        "economy": economy_summary,
+        "tank_capacity_l": rounded(tank_capacity, 3) if tank_capacity is not None else None,
+        "calibration_full_fillup_date": None,
+        "partial_fillups_since_calibration": 0,
+        "average_daily_distance_30d_km": None,
+        "daily_distance_window_days": 0,
+        "prediction_basis": "theoretical_empty_tank",
+        "primary_fillup_count": sum(1 for event in fuel_events if event["tank"] == "1"),
+        "latest_primary_fillup_marker": latest_primary_fillup_marker,
+        "distance_since_calibration_km": None,
+        "fuel_available_since_calibration_l": None,
+        "consumption_basis_source": automatic_consumption_source,
+        "manual_calibration_active": False,
+    }
+    full_indexes = [index for index, event in enumerate(primary_events) if event["full"]]
+    if (
+        full_indexes
+        and tank_capacity is not None and tank_capacity > 0
+        and automatic_consumption is not None and automatic_consumption > 0
+        and latest_odometer_value is not None
+    ):
+        calibration_index = full_indexes[-1]
+        calibration = primary_events[calibration_index]
+        calibration_odo = calibration["odo"]
+        if calibration_odo is not None and latest_odometer_value >= calibration_odo:
+            later = primary_events[calibration_index + 1:]
+            added_litres = sum((event["volume"] for event in later), Decimal(0))
+            consumed_litres = (latest_odometer_value - calibration_odo) * automatic_consumption / 100
+            raw_remaining = tank_capacity + added_litres - consumed_litres
+            estimated_fuel_remaining = min(tank_capacity, max(Decimal(0), raw_remaining))
+            estimated_range_remaining = estimated_fuel_remaining / automatic_consumption * 100
+
+            window_start = today - timedelta(days=29)
+            window_km = sum(
+                (km for day, km in logged_km_by_day.items() if window_start <= day <= today),
+                Decimal(0),
+            )
+            eligible_days = [day for day in logged_km_by_day if day <= today]
+            coverage_start = max(window_start, min(eligible_days)) if eligible_days else today
+            coverage_days = max(1, (today - coverage_start).days + 1)
+            average_daily = window_km / coverage_days
+            if average_daily > 0:
+                estimated_days_to_next_fillup = ceil(float(estimated_range_remaining / average_daily))
+                estimated_next_fillup_date = today + timedelta(days=estimated_days_to_next_fillup)
+
+            calibration_age = (today - calibration["day"]).days
+            forecast_meta.update({
+                "confidence": (
+                    economy_summary["confidence"]
+                    if automatic_consumption_source == "measured_full_to_full_recent"
+                    else ("normal" if len(latest_values) >= 2 and calibration_age <= 90 else "limited")
+                ),
+                "calibration_full_fillup_date": calibration["day"].isoformat(),
+                "partial_fillups_since_calibration": len(later),
+                "distance_since_calibration_km": rounded(latest_odometer_value - calibration_odo, 3),
+                "fuel_available_since_calibration_l": rounded(tank_capacity + added_litres, 3),
+                "average_daily_distance_30d_km": rounded(average_daily, 3),
+                "daily_distance_window_days": coverage_days,
+            })
+
+    def category_rows(values: dict[str, Decimal]) -> list[dict]:
+        # Cap attributes while preserving sums when many user categories exist.
+        ordered = sorted(values.items(), key=lambda item: (-item[1], item[0]))
+        visible = ordered[:19]
+        remainder = sum((amount for _, amount in ordered[19:]), Decimal(0))
+        rows = [{"name": label, "amount": rounded(amount)} for label, amount in visible]
+        if remainder:
+            rows.append({"name": "Övriga kategorier", "amount": rounded(remainder)})
+        return rows
+
+    # Always include the current month, even if it has neither trips nor costs.
+    bucket(today)
+    odo_months = {day.strftime("%Y-%m") for day in odometer_days}
+    month_keys = sorted(set(monthly) | set(logged_km_by_month) | set(fuel_ups_by_month) | odo_months, reverse=True)
+    odo_month_data = {}
+    month_estimates = {}
+    for key in month_keys:
+        year, month = (int(part) for part in key.split("-"))
+        start = date(year, month, 1)
+        next_month = date(year + (month == 12), (month % 12) + 1, 1)
+        end = min(today, next_month - timedelta(days=1))
+        odo_month_data[key] = odometer_distance(start, end) if end >= start else (None, {"odo_coverage": "unavailable"})
+        km, coverage = odo_month_data[key]
+        month_estimates[key] = estimate_period(start, end, km, coverage)
+    year_totals: dict[str, dict] = {}
+    all_categories: dict[str, Decimal] = {}
+    for month in month_keys:
+        year = month[:4]
+        year_row = year_totals.setdefault(year, {"fuel": Decimal(0), "other": Decimal(0),
+                                           "km": None, "fuel_ups": 0, "litres": Decimal(0), "trip_count": 0, "logged_trip_km": Decimal(0), "categories": {}})
+        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0), "litres": Decimal(0)})
+        year_row["fuel"] += values["fuel"]
+        year_row["other"] += values["other"]
+        year_row["litres"] += values["litres"]
+        year_row["fuel_ups"] += fuel_ups_by_month.get(month, 0)
+        year_row["trip_count"] += trip_count_by_month.get(month, 0)
+        year_row["logged_trip_km"] += logged_km_by_month.get(month, Decimal(0))
+        for label, amount in expense_categories_by_month.get(month, {}).items():
+            year_row["categories"][label] = year_row["categories"].get(label, Decimal(0)) + amount
+            all_categories[label] = all_categories.get(label, Decimal(0)) + amount
+
+    year_odo_data = {}
+    year_estimates = {}
+    for year in year_totals:
+        beginning = date(int(year), 1, 1)
+        ending = min(today, date(int(year), 12, 31))
+        year_odo_data[year] = odometer_distance(beginning, ending)
+        year_totals[year]["km"] = year_odo_data[year][0]
+        year_estimates[year] = estimate_period(beginning, ending, *year_odo_data[year])
+    lifetime_km, lifetime_coverage = odometer_distance(None, today)
+    lifetime_estimate = estimate_period(None, today, lifetime_km, lifetime_coverage)
+
+    def period_row(month: str) -> dict:
+        values = monthly.get(month, {"fuel": Decimal(0), "other": Decimal(0), "litres": Decimal(0)})
+        km, coverage = odo_month_data[month]
+        estimate = dict(month_estimates[month])
+        if estimate["estimated_fuel"] is not None:
+            estimate["estimated_total"] = rounded(Decimal(str(estimate["estimated_fuel"])) + values["other"])
+            estimate["estimated_total_per_km"] = per_odometer_km(Decimal(str(estimate["estimated_total"])), km)
+        trip_count_period = trip_count_by_month.get(month, 0)
+        return {"month": month, "fuel": rounded(values["fuel"]), "other": rounded(values["other"]),
+                "total": rounded(values["fuel"] + values["other"]), "km": rounded(km, 3) if km is not None else None,
+                "logged_trip_km": rounded(logged_km_by_month.get(month, Decimal(0)), 3),
+                "trip_count": trip_count_period,
+                "average_trip_km": rounded(logged_km_by_month.get(month, Decimal(0)) / trip_count_period, 3) if trip_count_period else None,
+                "litres": rounded(values["litres"], 3), "fuel_ups": fuel_ups_by_month.get(month, 0),
+                "fuel_per_logged_km": per_odometer_km(values["fuel"], km),
+                "total_per_logged_km": per_odometer_km(values["fuel"] + values["other"], km),
+                "categories": category_rows(expense_categories_by_month.get(month, {})), **coverage, **estimate}
+
+    truncated = len(month_keys) > MAX_MONTHS_IN_ATTRIBUTES
+    history = tuple(period_row(key) for key in month_keys[:MAX_MONTHS_IN_ATTRIBUTES])
+    for year, row in year_totals.items():
+        estimate = year_estimates[year]
+        if estimate["estimated_fuel"] is not None:
+            estimate["estimated_total"] = rounded(Decimal(str(estimate["estimated_fuel"])) + row["other"])
+            estimate["estimated_total_per_km"] = per_odometer_km(Decimal(str(estimate["estimated_total"])), row["km"])
+    if lifetime_estimate["estimated_fuel"] is not None:
+        lifetime_estimate["estimated_total"] = rounded(Decimal(str(lifetime_estimate["estimated_fuel"])) + expenses)
+        lifetime_estimate["estimated_total_per_km"] = per_odometer_km(Decimal(str(lifetime_estimate["estimated_total"])), lifetime_km)
+
+    def annual_fuel_stats(year: str, row: dict) -> dict:
+        year_number = int(year)
+        consumptions = [value for value, day in valid_consumptions if day.year == year_number]
+        prices = [value for value, day in valid_prices if day.year == year_number]
+        average_consumption = (
+            sum(consumptions, Decimal(0)) / len(consumptions) if consumptions else None
+        )
+        average_price = row["fuel"] / row["litres"] if row["litres"] > 0 else None
+        return {
+            "average_reported_consumption": rounded(average_consumption, 3) if average_consumption is not None else None,
+            "reported_consumption_samples": len(consumptions),
+            "average_fuel_price": rounded(average_price, 3) if average_price is not None else None,
+            "fuel_price_samples": len(prices),
+            "fuel_price_min": rounded(min(prices), 3) if prices else None,
+            "fuel_price_max": rounded(max(prices), 3) if prices else None,
+            "consumption_min": rounded(min(consumptions), 3) if consumptions else None,
+            "consumption_max": rounded(max(consumptions), 3) if consumptions else None,
+        }
+
+    year_history = tuple(
+        {"year": year, "fuel": rounded(row["fuel"]), "other": rounded(row["other"]),
+         "total": rounded(row["fuel"] + row["other"]),
+         "km": rounded(row["km"], 3) if row["km"] is not None else None,
+         "litres": rounded(row["litres"], 3), "fuel_ups": row["fuel_ups"],
+         "trip_count": row["trip_count"], "logged_trip_km": rounded(row["logged_trip_km"], 3),
+         "average_trip_km": rounded(row["logged_trip_km"] / row["trip_count"], 3) if row["trip_count"] else None,
+         "fuel_per_logged_km": per_odometer_km(row["fuel"], row["km"]),
+         "total_per_logged_km": per_odometer_km(row["fuel"] + row["other"], row["km"]),
+         "categories": category_rows(row["categories"]),
+         **annual_fuel_stats(year, row), **year_odo_data[year][1], **year_estimates[year]}
+        for year, row in sorted(year_totals.items(), reverse=True)[:40]
+    )
+    current = year_totals.get(str(today.year), {"fuel": Decimal(0), "other": Decimal(0),
+                                                "km": None, "fuel_ups": 0})
+    this_month = today.strftime("%Y-%m")
+    month_km = odo_month_data[this_month][0]
+
+    return FuelioSnapshot(
+        vehicle_name=name,
+        trip_count=trip_count,
+        trip_distance_km=rounded(trip_m / 1000, 3),
+        trip_duration_hours=rounded(duration_seconds / 3600),
+        monthly_trip_distance_km=rounded(month_trip_m / 1000, 3),
+        estimated_trip_cost=rounded(estimated_trip_cost),
+        fuel_count=fuel_count,
+        fuel_litres=rounded(litres, 3),
+        fuel_cost=rounded(fuel_cost),
+        monthly_fuel_cost=rounded(month_fuel_cost),
+        last_fuel_price=rounded(last_price, 3) if last_price is not None else None,
+        last_reported_consumption=rounded(last_consumption) if last_consumption is not None else None,
+        last_fillup_date=last_fillup,
+        expense_count=expense_count,
+        other_expenses=rounded(expenses),
+        monthly_other_expenses=rounded(month_expenses),
+        upcoming_expense_count=upcoming,
+        total_actual_cost=rounded(fuel_cost + expenses),
+        last_trip_date=last_trip,
+        latest_odometer_km=rounded(latest_odometer_value, 1) if latest_odometer_value is not None else None,
+        fuel_price_min_year=extrema["fuel_price_min_year"],
+        fuel_price_max_year=extrema["fuel_price_max_year"],
+        fuel_price_min_all=extrema["fuel_price_min_all"],
+        fuel_price_max_all=extrema["fuel_price_max_all"],
+        consumption_min_year=extrema["consumption_min_year"],
+        consumption_max_year=extrema["consumption_max_year"],
+        consumption_min_all=extrema["consumption_min_all"],
+        consumption_max_all=extrema["consumption_max_all"],
+        record_dates=record_dates,
+        monthly_cost_history=history,
+        monthly_history_truncated=truncated,
+        odometer_lifetime_km=rounded(lifetime_km, 3) if lifetime_km is not None else None,
+        odometer_lifetime_coverage=lifetime_coverage,
+        estimated_lifetime=lifetime_estimate,
+        latest_two_consumption=rounded(latest_two_consumption, 3) if latest_two_consumption is not None else None,
+        latest_two_consumption_count=len(latest_values),
+        yearly_cost_history=year_history,
+        all_cost_categories=tuple(category_rows(all_categories)),
+        fuel_count_month=fuel_ups_by_month.get(this_month, 0),
+        fuel_count_year=current["fuel_ups"],
+        fuel_cost_per_km_month=per_odometer_km(month_fuel_cost, month_km),
+        total_cost_per_km_month=per_odometer_km(month_fuel_cost + month_expenses, month_km),
+        fuel_cost_per_km_year=per_odometer_km(current["fuel"], current["km"]),
+        total_cost_per_km_year=per_odometer_km(current["fuel"] + current["other"], current["km"]),
+        fuel_cost_per_km_all=per_odometer_km(fuel_cost, lifetime_km),
+        total_cost_per_km_all=per_odometer_km(fuel_cost + expenses, lifetime_km),
+        distance_since_last_fillup_km=rounded(distance_since_last_fillup, 1) if distance_since_last_fillup is not None else None,
+        estimated_fuel_remaining_l=rounded(estimated_fuel_remaining, 2) if estimated_fuel_remaining is not None else None,
+        estimated_range_remaining_km=rounded(estimated_range_remaining, 1) if estimated_range_remaining is not None else None,
+        estimated_days_to_next_fillup=estimated_days_to_next_fillup,
+        estimated_next_fillup_date=estimated_next_fillup_date,
+        last_app_sync=None,
+        fuel_forecast=forecast_meta,
+        upcoming_calendar_events=tuple(calendar_events),
+        trip_statistics=trip_statistics,
+    )
+
+
+def load_snapshot(path: str, today: date | None = None) -> FuelioSnapshot:
+    """Load one bounded UTF-8 CSV from ZIP in memory; never extract files."""
+    archive = Path(path)
+    if archive.suffix.lower() != ".zip":
+        raise ValueError("Expected a Fuelio ZIP backup")
+    if archive.stat().st_size > MAX_ZIP_BYTES:
+        raise ValueError("Fuelio ZIP too large")
+    try:
+        with ZipFile(archive) as zip_file:
+            members = [item for item in zip_file.infolist() if not item.is_dir() and item.filename.lower().endswith(".csv")]
+            if len(members) != 1 or members[0].file_size > MAX_CSV_BYTES or members[0].flag_bits & 0x1:
+                raise ValueError("Expected one unencrypted CSV within ZIP")
+            with zip_file.open(members[0]) as source:
+                raw = source.read(MAX_CSV_BYTES + 1)
+            if len(raw) > MAX_CSV_BYTES:
+                raise ValueError("Fuelio CSV too large")
+    except (BadZipFile, EOFError) as exc:
+        raise ValueError("Invalid Fuelio ZIP") from exc
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeError as exc:
+        raise ValueError("Fuelio CSV must use UTF-8") from exc
+    snapshot = parse_backup(text, today=today)
+    source_modified = datetime.fromtimestamp(archive.stat().st_mtime).astimezone()
+    return replace(snapshot, last_app_sync=source_modified)

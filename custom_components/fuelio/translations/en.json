@@ -1,0 +1,17 @@
+{
+  "title": "Fuelio",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Fuelio local ZIP backup",
+        "description": "Enter the path to a Fuelio sync ZIP inside your Home Assistant configuration folder. No Google Drive authentication is needed for this development build.",
+        "data": {"file_path": "ZIP file path"}
+      }
+    },
+    "error": {
+      "outside_config": "The ZIP must be inside the Home Assistant configuration folder.",
+      "invalid_backup": "Cannot read the ZIP. Check that the file exists and is a metric Fuelio sync backup."
+    },
+    "abort": {"already_configured": "This ZIP file is already configured."}
+  }
+}

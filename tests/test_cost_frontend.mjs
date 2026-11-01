@@ -1,0 +1,75 @@
+// Test the actual extension using synthetic mixed-prefix HA entities.
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+const source = readFileSync('custom_components/fuelio/www/ha-fuelio-card.js', 'utf8');
+const classes = new Map();
+class E { attachShadow() { this.shadowRoot = { innerHTML: '', addEventListener: () => {} }; return this.shadowRoot; } }
+const sandbox = vm.createContext({ HTMLElement: E, customElements: { get: (key) => classes.get(key), define: (key, c) => classes.set(key, c) }, window: { customCards: [] } });
+new vm.Script(source).runInContext(sandbox);
+const card = new (classes.get('ha-fuelio-card'))();
+card.setConfig({ entity: 'sensor.mmk912_monthly_cost_breakdown' });
+const states = {}, entities = {};
+const add = (id, key, value, attributes = {}) => {
+  states[id] = { state: String(value), attributes, last_updated: '2026-09-21T21:00:00Z' };
+  entities[id] = { entity_id: id, platform: 'fuelio', device_id: 'test-device', unique_id: `test-entry_${key}` };
+};
+add('sensor.mmk912_last_fuel_price', 'last_fuel_price', 20);
+add('sensor.mmk912_fuel_ups', 'fuel_count', 3);
+add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_cost_breakdown', 1200, {
+  months: [{ month: '2026-09', fuel: 1000, other: 200, total: 1200, km: 100, litres: 47.5, odo_coverage: 'partial_start', odo_start_on: '2026-09-05', odo_end_on: '2026-09-20', fuel_ups: 1,
+    fuel_per_logged_km: 10, total_per_logged_km: 12, estimated_fuel: 70, estimated_total: 270, estimated_total_per_km: 2.7, estimate_coverage: 'one_consumption_value', trip_count: 2, average_trip_km: 15, categories: [{ name: 'Parkering', amount: 200 }, { name: 'Underhåll', amount: 34.9 }] }],
+  years: [{ year: '2026', fuel: 2000, other: 200, total: 2200, km: 200, fuel_ups: 2,
+    fuel_per_logged_km: 10, total_per_logged_km: 11, estimated_fuel: 150, estimated_total: 350, estimated_total_per_km: 1.75,
+    litres: 91, trip_count: 5, average_trip_km: 18.2, average_reported_consumption: 5.56, reported_consumption_samples: 2,
+    average_fuel_price: 21.978, fuel_price_min: 19.54, fuel_price_max: 22.64, consumption_min: 5.32, consumption_max: 5.8,
+    categories: [{ name: 'Parkering', amount: 200 }, { name: 'Underhåll', amount: 34.9 }] }],
+  categories_all: [{ name: 'Parkering', amount: 200 }, { name: 'Underhåll', amount: 34.9 }], estimated_lifetime: { estimated_fuel: 150, estimated_total: 350 }, lifetime_odometer_km: 205, latest_two_consumption: 5.55, latest_two_consumption_count: 2
+});
+add('sensor.externa_sensorer_fuelio_vehicle_fuel_cost_per_logged_km_since_import_start', 'fuel_cost_per_km_all', 9);
+add('sensor.externa_sensorer_fuelio_vehicle_total_cost_per_logged_km_since_import_start', 'total_cost_per_km_all', 12);
+card.hass = { states, entities };
+card._open.annual = true;
+card._open.costs = true;
+card._open.fuel = true;
+card._overviewOpen.fuel = true;
+card._overviewOpen.booked = true;
+card._overviewOpen.drivecost = true;
+card._render();
+const html = card.shadowRoot.innerHTML;
+assert.match(html, /Parkering/);
+assert.match(html, /Bränsle · månad/);
+assert.match(html, /10 kr\/km/);
+assert.match(html, /12 kr\/km/);
+assert.match(html, /Antal tankningar/);
+assert.match(html, /Körsträcka denna månad/);
+assert.match(html, /Sedan importstart/);
+assert.match(html, /91 L/);
+assert.match(html, /2,7 kr\/km/);
+assert.match(html, /Månadsstatistik/);
+assert.match(html, /Genomsnitt\/resa/);
+assert.match(html, /15 km/);
+assert.match(html, /70,00 kr/);
+assert.match(html, /47,5 L/);
+assert.match(html, /1\s?200,00 kr/);
+assert.match(html, /Beräknad körkostnad\/km/);
+assert.match(html, /Bokförda utgifter per avläst ODO-kilometer/);
+assert.match(html, /Delperiod: 2026-09-05/);
+assert.match(html, /Årsöversikt/);
+assert.match(html, /Årsrapport · 2026/);
+assert.match(html, /Rapporterat snitt/);
+assert.match(html, /5,56 L\/100 km/);
+assert.match(html, /21,98 kr\/L/);
+assert.match(html, /Utgifter per kategori · 2026/);
+assert.match(html, /data-chart="categories"/);
+assert.match(html, /Visa graf/);
+card._open.service = true;
+card._render();
+const serviceHtml = card.shadowRoot.innerHTML;
+assert.match(serviceHtml, /Service &amp; underhåll/);
+assert.match(serviceHtml, /Underhåll · september 2026/);
+assert.match(serviceHtml, /34,90 kr/);
+assert.match(serviceHtml, /Underhåll · år 2026/);
+assert.match(serviceHtml, /Underhåll · sedan importstart/);
+assert.match(serviceHtml, /2026\.11\.0/);
+console.log('PASS: categorized costs, period-specific kr\/km, fuel-ups and maintenance render with mixed entity IDs');

@@ -1,0 +1,181 @@
+// Synthetic, DOM-free smoke tests for the self-contained read-only card.
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import vm from "node:vm";
+
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const source = readFileSync(path.join(root, "custom_components/fuelio/www/ha-fuelio-card.js"), "utf8");
+const constructors = new Map();
+class FakeHTMLElement {
+  attachShadow() {
+    const listeners = {};
+    this.shadowRoot = { innerHTML: "", addEventListener: (name, fn) => { listeners[name] = fn; }, listeners };
+    return this.shadowRoot;
+  }
+}
+const context = vm.createContext({
+  HTMLElement: FakeHTMLElement,
+  customElements: {
+    get: (key) => constructors.get(key),
+    define: (key, ctor) => constructors.set(key, ctor),
+  },
+  window: { customCards: [] },
+});
+new vm.Script(source, { filename: "ha-fuelio-card.js" }).runInContext(context);
+assert.ok(constructors.has("ha-fuelio-card"));
+assert.equal(context.window.customCards.length, 1);
+const Card = constructors.get("ha-fuelio-card");
+const card = new Card();
+assert.throws(() => card.setConfig({ entity: "sensor.invalid" }), /monthly_cost_breakdown/);
+card.setConfig({ entity: "sensor.synthetic_car_monthly_cost_breakdown", title: "<script>invalid</script>" });
+assert.match(card.shadowRoot.innerHTML, /Läser Fuelio/);
+const state = (value, attributes = {}) => ({ state: String(value), attributes, last_updated: "2026-09-21T22:00:00+02:00" });
+const prefix = "sensor.synthetic_car_";
+const states = {
+  [prefix + "monthly_cost_breakdown"]: state(1200, { months: [
+    { month: "2026-09", fuel: 1000, other: 200, total: 1200 },
+    { month: "2026-08", fuel: 800, other: 0, total: 800 },
+  ], years: [
+    { year: "2026", fuel: 1800, other: 200, total: 2000, km: 350, litres: 100, fuel_ups: 4, trip_count: 20,
+      average_trip_km: 17.5, average_reported_consumption: 5.56, reported_consumption_samples: 2,
+      average_fuel_price: 18, fuel_price_min: 17, fuel_price_max: 20, consumption_min: 5.3, consumption_max: 5.8,
+      categories: [{ name: "Parkering", amount: 200 }] }
+  ], history_truncated: false, trip_statistics: {
+    years: [{ year: "2026", trip_km: 350.5, odo_km: 350, trip_count: 20, duration_hours: 8.5, average_trip_km: 17.525, odo_coverage: "prior_checkpoint", odo_start_on: "2025-12-31", odo_end_on: "2026-09-21" }],
+    months: [
+      { month: "2026-09", trip_km: 180.5, odo_km: 180, trip_count: 10, duration_hours: 4.2, average_trip_km: 18.05, odo_coverage: "prior_checkpoint", odo_start_on: "2026-08-31", odo_end_on: "2026-09-21" },
+      { month: "2026-08", trip_km: 170, odo_km: 170, trip_count: 10, duration_hours: 4.3, average_trip_km: 17, odo_coverage: "prior_checkpoint", odo_start_on: "2026-07-31", odo_end_on: "2026-08-31" }
+    ],
+    weeks: [{ week: "2026-W38", start: "2026-09-14", end: "2026-09-20", trip_km: 42.4, odo_km: 42, trip_count: 4, duration_hours: 1.4, average_trip_km: 10.6, odo_coverage: "prior_checkpoint", odo_start_on: "2026-09-13", odo_end_on: "2026-09-20" }],
+    days: [{ date: "2026-09-18", trip_km: 18.2, odo_km: 18, trip_count: 2, duration_hours: 0.6, average_trip_km: 9.1, odo_coverage: "prior_checkpoint", odo_start_on: "2026-09-17", odo_end_on: "2026-09-18" }]
+  } }),
+  [prefix + "latest_odometer_km"]: state(10001),
+  [prefix + "trip_count"]: state(20),
+  [prefix + "trip_distance_km"]: state(350),
+  [prefix + "last_reported_consumption"]: state(5.8),
+  [prefix + "last_fuel_price"]: state(22.64),
+  [prefix + "fuel_count"]: state(4),
+  [prefix + "fuel_litres"]: state(100),
+  [prefix + "fuel_cost"]: state(1800),
+  [prefix + "other_expenses"]: state(200),
+  [prefix + "total_actual_cost"]: state(2000),
+  [prefix + "estimated_trip_cost"]: state(49),
+  [prefix + "last_fillup_date"]: state("2026-09-10"),
+  [prefix + "distance_since_last_fuel_up"]: state(379),
+  [prefix + "estimated_fuel_remaining"]: state(38.93, {
+    confidence: "normal", consumption_basis_l_per_100km: 5.56,
+    calibration_full_fillup_date: "2026-09-12", consumption_samples: 2,
+    fuel_available_since_calibration_l: 60, distance_since_calibration_km: 379,
+    primary_fillup_count: 4, manual_calibration_active: false,
+    fuel_available_since_calibration_l: 60, distance_since_calibration_km: 379,
+    primary_fillup_count: 4, manual_calibration_active: false,
+  }),
+  [prefix + "estimated_range_remaining"]: state(700.1, {
+    confidence: "normal", consumption_basis_l_per_100km: 5.56,
+    calibration_full_fillup_date: "2026-09-12", consumption_samples: 2,
+  }),
+  [prefix + "estimated_days_to_next_fuel_up"]: state(23),
+  [prefix + "estimated_next_fuel_up"]: state("2026-10-18"),
+  [prefix + "last_fuelio_app_sync"]: state("2026-09-25T20:37:31+02:00"),
+  [prefix + "fuel_price_min_year"]: state(13.5, { recorded_on: "2026-03-03" }),
+  [prefix + "consumption_min_all"]: state("unknown"),
+};
+const serviceCalls = [];
+card.hass = { states, callService: async (...args) => { serviceCalls.push(args); } };
+assert.match(card.shadowRoot.innerHTML, /&lt;script&gt;invalid&lt;\/script&gt;/);
+assert.doesNotMatch(card.shadowRoot.innerHTML, /<script>invalid<\/script>/);
+assert.match(card.shadowRoot.innerHTML, /1\s?200,00 kr/);
+assert.match(card.shadowRoot.innerHTML, /Pris- &amp; förbrukningsrekord/);
+assert.match(card.shadowRoot.innerHTML, /Tank & räckvidd/);
+assert.match(card.shadowRoot.innerHTML, /700,1 km/);
+assert.match(card.shadowRoot.innerHTML, /38,93 L/);
+assert.match(card.shadowRoot.innerHTML, /2026-10-18/);
+assert.match(card.shadowRoot.innerHTML, /Kalibrera/);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-range-calibrate]" ? { dataset: { rangeCalibrate: "" } } : null } });
+assert.equal(card._rangeDialog, true);
+assert.match(card.shadowRoot.innerHTML, /Kalibrera teoretisk räckvidd/);
+assert.match(card.shadowRoot.innerHTML, /nästa registrerade primärtankning/);
+await card._callRangeService("calibrate_range", { range_km: 650 });
+assert.equal(serviceCalls[0][0], "fuelio");
+assert.equal(serviceCalls[0][1], "calibrate_range");
+assert.equal(serviceCalls[0][2].entity_id, prefix + "estimated_range_remaining");
+assert.equal(serviceCalls[0][2].range_km, 650);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-range-close]" ? { dataset: { rangeClose: "" } } : null } });
+assert.equal(card._rangeDialog, false);
+assert.match(card.shadowRoot.innerHTML, /ZIP uppdaterad/);
+assert.match(card.shadowRoot.innerHTML, /pill-status/);
+assert.match(card.shadowRoot.innerHTML, /pill-sync/);
+assert.match(card.shadowRoot.innerHTML, /pill-trip/);
+assert.match(card.shadowRoot.innerHTML, /justify-content:flex-start/);
+assert.match(card.shadowRoot.innerHTML, /Årsöversikt/);
+assert.match(card.shadowRoot.innerHTML, /data-section="annual" aria-expanded="false"/);
+assert.match(card.shadowRoot.innerHTML, /data-section="tripstats" aria-expanded="false"/);
+assert.doesNotMatch(card.shadowRoot.innerHTML.split('<div class="dashboard-grid">')[0], /Löpande Fuelio-statistik sedan importstart|Sedan importstart/);
+assert.match(card.shadowRoot.innerHTML, /data-section="costs" aria-expanded="false"/);
+assert.doesNotMatch(card.shadowRoot.innerHTML, /Årsrapport · 2026/);
+assert.match(card.shadowRoot.innerHTML, /Resestatistik/);
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "tripstats" } }) } });
+assert.equal(card._open.tripstats, true);
+assert.match(card.shadowRoot.innerHTML, /Resestatistik/);
+assert.match(card.shadowRoot.innerHTML, /Sedan importstart/);
+assert.match(card.shadowRoot.innerHTML, /350,5 km/);
+assert.match(card.shadowRoot.innerHTML, /350 km/);
+assert.match(card.shadowRoot.innerHTML, /data-trip-graph-toggle/);
+assert.match(card.shadowRoot.innerHTML, /aria-expanded="false"/);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-trip-graph-toggle]" ? { dataset: { tripGraphToggle: "" } } : null } });
+assert.equal(card._tripGraphOpen, true);
+assert.match(card.shadowRoot.innerHTML, /TripDist vs ODO-sträcka/);
+card.shadowRoot.listeners.change({ target: { id: "fuelio-trip-graph-metric", value: "average" } });
+assert.equal(card._tripGraphMetric, "average");
+assert.match(card.shadowRoot.innerHTML, /Rullande 3-perioders medel/);
+assert.match(card.shadowRoot.innerHTML, /series-b-line/);
+assert.equal(card._years().length, 1);
+assert.equal(card._chartNumber(null), null);
+assert.equal(card._chartNumber(undefined), null);
+assert.equal(card._chartNumber(""), null);
+assert.match(card.shadowRoot.innerHTML, /data-chart="costs"/);
+assert.match(card.shadowRoot.innerHTML, /data-chart="distance"/);
+assert.match(card.shadowRoot.innerHTML, /data-chart="cost-per-km"/);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-chart]" ? { dataset: { chart: "costs", chartYear: "2026" } } : null } });
+assert.equal(card._chart.id, "costs");
+assert.equal(card._chart.year, "2026");
+assert.match(card.shadowRoot.innerHTML, /<div class="chart-backdrop">/);
+assert.match(card.shadowRoot.innerHTML, /Kostnader per månad/);
+assert.match(card.shadowRoot.innerHTML, /chart-svg/);
+assert.match(card.shadowRoot.innerHTML, /Bränsle/);
+assert.match(card.shadowRoot.innerHTML, /Övrigt/);
+card.shadowRoot.listeners.click({ target: { closest: (selector) => selector === "[data-chart-close]" ? { dataset: { chartClose: "" } } : null } });
+assert.equal(card._chart, null);
+assert.doesNotMatch(card.shadowRoot.innerHTML, /<div class="chart-backdrop">/);
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "records" } }) } });
+assert.equal(card._open.records, true);
+assert.match(card.shadowRoot.innerHTML, /13,5 kr\/L/);
+assert.match(card.shadowRoot.innerHTML, /2026-03-03/);
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "version" } }) } });
+assert.equal(card._open.version, true);
+assert.match(card.shadowRoot.innerHTML, /Senaste ZIP-uppdatering/);
+assert.equal(card._months().length, 2);
+const before = card.shadowRoot.innerHTML;
+card.hass = { states };
+assert.equal(card.shadowRoot.innerHTML, before, "Unrelated HA setter calls must not redraw the card");
+card.shadowRoot.listeners.change({ target: { id: "fuelio-trip-level", value: "week" } });
+assert.equal(card._tripLevel, "week");
+assert.match(card.shadowRoot.innerHTML, /Vecka 38 · 2026/);
+assert.match(card.shadowRoot.innerHTML, /42,4 km/);
+card.shadowRoot.listeners.change({ target: { id: "fuelio-trip-level", value: "day" } });
+assert.equal(card._tripLevel, "day");
+assert.match(card.shadowRoot.innerHTML, /18,2 km/);
+assert.doesNotMatch(card.shadowRoot.innerHTML, /data-chart="trip-distance"/);
+card.shadowRoot.listeners.change({ target: { id: "fuelio-month", value: "2026-08" } });
+assert.equal(card._month, "2026-08");
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "costs" } }) } });
+assert.equal(card._open.costs, true);
+assert.match(card.shadowRoot.innerHTML, /Bokförda utgifter/);
+assert.match(card.shadowRoot.innerHTML, /800,00 kr/);
+card.shadowRoot.listeners.click({ target: { closest: () => ({ dataset: { section: "records" } }) } });
+assert.equal(card._open.records, false);
+assert.match(card.shadowRoot.innerHTML, /data-section="records" aria-expanded="false"/);
+assert.doesNotMatch(card.shadowRoot.innerHTML, /<script>invalid<\/script>/);
+console.log("PASS: Fuelio frontend config, escaping, rendering, calibration modal, month selector and accordion");

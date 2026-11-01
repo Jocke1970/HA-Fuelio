@@ -1,0 +1,1182 @@
+/* HA-Fuelio Card 2026.11.0 — current-tank range calibration and interactive SVG charts. */
+(() => {
+  "use strict";
+  const CARD_VERSION = "2026.11.0";
+  const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Home Assistant derives entity IDs from display names, NOT description.key.
+// Old IDs may retain a pre-privacy vehicle prefix while new IDs use a generic one.
+const ENTITY_SLUGS = Object.freeze({
+  trip_count: "trips", trip_distance_km: "trip_distance", monthly_trip_distance_km: "trip_distance_this_month",
+  trip_duration_hours: "travel_time", estimated_trip_cost: "estimated_trip_costs_not_actual_spend",
+  fuel_count: "fuel_ups", fuel_litres: "fuel_volume", fuel_cost: "fuel_expenditure",
+  monthly_fuel_cost: "fuel_expenditure_this_month", last_fuel_price: "last_fuel_price",
+  last_reported_consumption: "last_reported_fuel_consumption", last_fillup_date: "last_fuel_up",
+  expense_count: "expense_entries", other_expenses: "other_expenditure",
+  monthly_other_expenses: "other_expenditure_this_month", upcoming_expense_count: "future_expense_entries",
+  total_actual_cost: "total_actual_expenditure", last_trip_date: "last_trip",
+  latest_odometer_km: "latest_odometer",
+  distance_since_last_fillup_km: "distance_since_last_fuel_up",
+  estimated_fuel_remaining_l: "estimated_fuel_remaining",
+  estimated_range_remaining_km: "estimated_range_remaining",
+  estimated_days_to_next_fillup: "estimated_days_to_next_fuel_up",
+  estimated_next_fillup_date: "estimated_next_fuel_up",
+  last_app_sync: "last_fuelio_app_sync",
+  fuel_price_min_year: "lowest_fuel_price_this_year",
+  fuel_price_max_year: "highest_fuel_price_this_year", fuel_price_min_all: "lowest_fuel_price_since_import_start",
+  fuel_price_max_all: "highest_fuel_price_since_import_start",
+  consumption_min_year: "lowest_reported_consumption_this_year",
+  consumption_max_year: "highest_reported_consumption_this_year",
+  consumption_min_all: "lowest_reported_consumption_since_import_start",
+  consumption_max_all: "highest_reported_consumption_since_import_start",
+  fuel_count_month: "fuel_ups_this_month", fuel_count_year: "fuel_ups_this_year",
+  fuel_cost_per_km_month: "fuel_cost_per_logged_km_this_month",
+  total_cost_per_km_month: "total_cost_per_logged_km_this_month",
+  fuel_cost_per_km_year: "fuel_cost_per_logged_km_this_year",
+  total_cost_per_km_year: "total_cost_per_logged_km_this_year",
+  fuel_cost_per_km_all: "fuel_cost_per_logged_km_since_import_start",
+  total_cost_per_km_all: "total_cost_per_logged_km_since_import_start",
+  monthly_cost_breakdown: "monthly_cost_breakdown",
+});
+  const valid = (state) => state && !["unknown", "unavailable", "none", "null", ""].includes(String(state.state).toLowerCase());
+  const num = (state) => valid(state) && Number.isFinite(Number(state.state)) ? Number(state.state) : null;
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const kroner = (value) => Number.isFinite(value) ? `${money.format(value)} kr` : "—";
+  const decimal = (value, unit = "") => Number.isFinite(value) ? `${fmt.format(value)}${unit ? ` ${unit}` : ""}` : "—";
+  const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
+  const dateTime = (value) => {
+    const parsed = new Date(String(value || ""));
+    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat("sv-SE", {
+      dateStyle: "short", timeStyle: "short"
+    }).format(parsed);
+  };
+  const monthName = (key) => /^\d{4}-(0[1-9]|1[0-2])$/.test(key)
+    ? new Intl.DateTimeFormat("sv-SE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
+    : "Okänd månad";
+  const style = `
+    :host { display:block; container-type:inline-size; color:var(--primary-text-color,#202124); font:inherit; }
+    * { box-sizing:border-box; }
+    .shell { overflow:hidden; border-radius:26px; padding:18px; background:var(--ha-card-background,var(--card-background-color,#fff)); box-shadow:var(--ha-card-box-shadow,0 8px 28px #00000012); }
+    .header { display:flex; flex-direction:column; align-items:stretch; gap:12px; margin-bottom:16px; }
+    .title-wrap { display:flex; flex-direction:column; gap:5px; }
+    h2 { font-size:1.3rem; margin:0; font-weight:800; letter-spacing:-.02em; }
+    h3 { font-size:1rem; margin:0; }
+    .header-meta { display:flex; flex-wrap:wrap; justify-content:flex-start; align-items:center; gap:7px; width:100%; }
+    .muted { color:var(--secondary-text-color,#68727d); font-size:.78rem; }
+    .pill { padding:6px 10px; border-radius:999px; background:var(--secondary-background-color,#eef1f4); font-size:.72rem; white-space:nowrap; }
+    .pill strong { font-weight:800; }
+    .pill-status { background:color-mix(in srgb,var(--card-background-color,#fff) 86%,var(--success-color,#4caf50) 14%); }
+    .pill-sync { background:var(--secondary-background-color,#eef1f4); }
+    .pill-trip { background:color-mix(in srgb,var(--secondary-background-color,#eef1f4) 72%,var(--card-background-color,#fff) 28%); color:var(--secondary-text-color,#68727d); }
+    .pill-trip strong { color:var(--primary-text-color,#202124); }
+    .kpi-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+    .kpi { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:13px 14px; background:linear-gradient(180deg,color-mix(in srgb,var(--card-background-color,#fff) 96%,var(--primary-color,#03a9f4) 4%),var(--card-background-color,#fff)); }
+    .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
+    .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; }
+    button.kpi,button.tile { appearance:none; color:inherit; font:inherit; width:100%; }
+    button.tile { background:var(--card-background-color,#fff); }
+    .chart-action { cursor:pointer; position:relative; transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease; }
+    .chart-action:hover { transform:translateY(-1px); border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
+    .chart-action:focus-visible,.category-chart:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:2px; }
+    .chart-hint { display:block; margin-top:5px; font-size:.62rem; color:var(--primary-color,#03a9f4); font-weight:750; }
+    .overview { display:grid; grid-template-columns:1fr; gap:12px; }
+    .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
+    .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
+    .overview-expander { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
+    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:14px 15px; display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px; text-align:left; font:inherit; cursor:pointer; }
+    .overview-expander>button:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
+    .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; }
+    .overview-summary { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:4px 10px; color:var(--secondary-text-color,#68727d); font-size:.7rem; text-align:right; }
+    .overview-summary strong { color:var(--primary-text-color,#202124); font-size:.78rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .overview-chevron { font-weight:800; }
+    .overview-expander-body { padding:0 15px 12px; }
+    .overview-row { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 10px; padding:8px 0; border-top:1px solid var(--divider-color,#e2e4e8); }
+    .overview-row:first-of-type { border-top:0; }
+    .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.75rem; }
+    .overview-row strong { text-align:right; font-size:.95rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .overview-row .note { width:100%; text-align:right; font-size:.68rem; color:var(--secondary-text-color,#68727d); }
+    .range-panel { display:grid; gap:12px; }
+    .range-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .range-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:7px; }
+    .range-calibrate { appearance:none; border:1px solid color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#d4d9df)); border-radius:999px; padding:6px 10px; background:color-mix(in srgb,var(--card-background-color,#fff) 90%,var(--primary-color,#03a9f4) 10%); color:var(--primary-text-color,#202124); font:inherit; font-size:.72rem; font-weight:800; cursor:pointer; }
+    .range-calibrate:hover { border-color:var(--primary-color,#03a9f4); }
+    .range-calibrate:disabled { cursor:not-allowed; opacity:.45; }
+    .range-manual-note { padding:9px 11px; border-radius:12px; background:color-mix(in srgb,var(--card-background-color,#fff) 90%,var(--primary-color,#03a9f4) 10%); color:var(--secondary-text-color,#68727d); font-size:.7rem; line-height:1.4; }
+    .range-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .range-stat { min-width:0; padding:11px 12px; border-radius:15px; background:var(--secondary-background-color,#f4f5f7); }
+    .range-stat span { display:block; color:var(--secondary-text-color,#68727d); font-size:.69rem; margin-bottom:4px; }
+    .range-stat strong { display:block; font-size:1.08rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .fuel-meter { height:10px; border-radius:999px; background:var(--secondary-background-color,#e8ebef); overflow:hidden; }
+    .fuel-meter>span { display:block; height:100%; border-radius:999px; background:var(--primary-color,#03a9f4); }
+    .fuel-meter-note { display:flex; justify-content:space-between; gap:10px; margin-top:6px; color:var(--secondary-text-color,#68727d); font-size:.68rem; }
+    .tripbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 14px; margin-top:12px; padding:10px 12px; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; font-size:.78rem; }
+    .dashboard-grid { display:grid; grid-template-columns:1fr; gap:12px; margin-top:12px; }
+    .section { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
+    .section>button { cursor:pointer; display:flex; align-items:center; justify-content:space-between; width:100%; background:none; border:none; color:inherit; padding:14px 16px; text-align:left; font:inherit; font-weight:800; }
+    .section>button:focus-visible,select:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
+    .body { padding:0 14px 14px; }
+    .section-title { font-weight:800; margin:14px 2px 9px; font-size:.86rem; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .tile { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; padding:12px 8px; text-align:center; }
+    .tile .ico { font-size:1.05rem; display:block; margin-bottom:5px; }
+    .tile .label { font-size:.71rem; font-weight:750; margin-bottom:5px; }
+    .tile .value { font-weight:850; font-size:1rem; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+    .tile .detail { font-size:.66rem; color:var(--secondary-text-color,#68727d); margin-top:4px; }
+    .select-label { display:block; margin:12px 2px 6px; font-size:.75rem; color:var(--secondary-text-color,#68727d); }
+    select { width:100%; color:inherit; background:var(--ha-card-background,var(--card-background-color,#fff)); border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:10px; font:inherit; }
+    .summary { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:10px 11px; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:9px; font-size:.77rem; }
+    .summary strong { font-variant-numeric:tabular-nums; text-align:right; }
+    .trip-graph-box { margin-top:12px; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; overflow:hidden; }
+    .trip-graph-toggle { appearance:none; width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; border:0; background:var(--secondary-background-color,#f4f5f7); color:inherit; padding:11px 13px; font:inherit; font-weight:800; cursor:pointer; }
+    .trip-graph-body { padding:0 12px 12px; }
+    .trip-graph-inline { margin-top:10px; }
+    .notice { padding:10px 11px; margin-top:9px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); border-radius:12px; font-size:.74rem; line-height:1.4; }
+    .small { font-size:.72rem; }
+    .foot { text-align:right; margin-top:12px; }
+    .category-list { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:3px 11px; }
+    .category-chart { cursor:pointer; transition:border-color .12s ease,box-shadow .12s ease; }
+    .category-chart:hover { border-color:color-mix(in srgb,var(--primary-color,#03a9f4) 45%,var(--divider-color,#e2e4e8)); box-shadow:0 6px 16px #00000010; }
+    .category-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--divider-color,#e2e4e8); font-size:.79rem; }
+    .category-row:last-child { border:0; }
+    .category-row strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .annual-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .annual-columns { display:grid; grid-template-columns:1fr; gap:14px; }
+    .annual-block { min-width:0; }
+    .annual-hero { margin-bottom:2px; }
+    .records-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .chart-backdrop,.calibration-backdrop { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:18px; background:#0008; backdrop-filter:blur(4px); }
+    .chart-modal { width:min(1100px,96vw); max-height:92vh; overflow:auto; border:1px solid var(--divider-color,#e2e4e8); border-radius:24px; background:var(--ha-card-background,var(--card-background-color,#fff)); color:var(--primary-text-color,#202124); box-shadow:0 24px 80px #0008; }
+    .chart-head { position:sticky; top:0; z-index:2; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px 14px; border-bottom:1px solid var(--divider-color,#e2e4e8); background:var(--ha-card-background,var(--card-background-color,#fff)); }
+    .chart-head h3 { font-size:1.15rem; margin:0 0 4px; }
+    .chart-close { flex:none; width:38px; height:38px; border:1px solid var(--divider-color,#e2e4e8); border-radius:999px; background:var(--secondary-background-color,#f4f5f7); color:inherit; cursor:pointer; font-size:1.05rem; }
+    .chart-body { padding:16px 18px 8px; }
+    .chart-wrap { width:100%; overflow-x:auto; }
+    .chart-svg { display:block; width:100%; min-width:640px; height:auto; overflow:visible; }
+    .chart-svg text { fill:var(--secondary-text-color,#68727d); font-size:13px; font-family:inherit; }
+    .chart-svg .axis-strong { fill:var(--primary-text-color,#202124); font-weight:750; }
+    .chart-svg .gridline { stroke:var(--divider-color,#dfe3e8); stroke-width:1; }
+    .chart-svg .series-a-fill { fill:var(--primary-color,#03a9f4); }
+    .chart-svg .series-b-fill { fill:var(--accent-color,#ff9800); }
+    .chart-svg .series-a-line { fill:none; stroke:var(--primary-color,#03a9f4); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-svg .series-b-line { fill:none; stroke:var(--accent-color,#ff9800); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-svg .series-a-dot { fill:var(--primary-color,#03a9f4); stroke:var(--card-background-color,#fff); stroke-width:2; }
+    .chart-svg .series-b-dot { fill:var(--accent-color,#ff9800); stroke:var(--card-background-color,#fff); stroke-width:2; }
+    .chart-legend { display:flex; flex-wrap:wrap; gap:12px 20px; padding:2px 4px 12px; color:var(--secondary-text-color,#68727d); font-size:.76rem; }
+    .chart-legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--primary-color,#03a9f4); }
+    .chart-legend span:nth-child(2)::before { background:var(--accent-color,#ff9800); }
+    .chart-note { margin:0 18px 18px; padding:10px 12px; border-radius:12px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); font-size:.74rem; line-height:1.4; }
+    .chart-empty { padding:44px 20px; text-align:center; color:var(--secondary-text-color,#68727d); }
+    .calibration-modal { width:min(540px,96vw); border:1px solid var(--divider-color,#e2e4e8); border-radius:22px; padding:20px; background:var(--ha-card-background,var(--card-background-color,#fff)); color:var(--primary-text-color,#202124); box-shadow:0 24px 80px #0008; }
+    .calibration-modal h3 { margin:0 0 6px; font-size:1.08rem; }
+    .calibration-modal p { margin:0 0 14px; color:var(--secondary-text-color,#68727d); font-size:.78rem; line-height:1.45; }
+    .calibration-field { display:grid; gap:6px; margin:14px 0; }
+    .calibration-field label { font-size:.76rem; font-weight:800; }
+    .calibration-field input { width:100%; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:11px 12px; background:var(--card-background-color,#fff); color:inherit; font:inherit; font-size:1rem; }
+    .calibration-meta { display:grid; gap:5px; margin:12px 0; padding:10px 12px; border-radius:12px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); font-size:.72rem; }
+    .calibration-error { margin:10px 0; padding:9px 11px; border-radius:10px; background:color-mix(in srgb,var(--error-color,#db4437) 12%,var(--card-background-color,#fff)); color:var(--error-color,#db4437); font-size:.74rem; font-weight:700; }
+    .calibration-buttons { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .calibration-buttons button { appearance:none; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:9px 12px; background:var(--secondary-background-color,#f4f5f7); color:inherit; font:inherit; font-weight:800; cursor:pointer; }
+    .calibration-buttons .primary { border-color:var(--primary-color,#03a9f4); background:var(--primary-color,#03a9f4); color:var(--text-primary-color,#fff); }
+    @container (min-width:720px) {
+      .shell { padding:22px; }
+      .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .range-panel { grid-column:1 / -1; }
+      .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .annual-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .records-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    }
+    @container (min-width:1050px) {
+      .shell { padding:24px; }
+      .kpi-strip { grid-template-columns:repeat(6,minmax(0,1fr)); }
+      .overview { grid-template-columns:repeat(4,minmax(0,1fr)); }
+      .range-panel { grid-column:span 2; }
+      .dashboard-grid { grid-template-columns:minmax(0,1.6fr) minmax(340px,.9fr); align-items:start; }
+      .section-costs { grid-row:span 2; }
+      .section-annual,.section-tripstats,.section-records,.section-service,.section-version { grid-column:1 / -1; }
+      .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .section-costs .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    }
+    @container (min-width:1380px) {
+      .overview { grid-template-columns:repeat(6,minmax(0,1fr)); }
+      .overview-panel { grid-column:span 1; }
+      .range-panel { grid-column:span 2; }
+      .dashboard-grid { grid-template-columns:minmax(0,1.75fr) minmax(400px,.85fr); }
+      .annual-grid { grid-template-columns:repeat(6,minmax(0,1fr)); }
+      .annual-columns { grid-template-columns:1.15fr .85fr; gap:18px; }
+      .section-records .body { display:grid; grid-template-columns:1fr 1fr; gap:0 18px; }
+      .section-records .notice { grid-column:1 / -1; }
+    }
+    @media (max-width:340px) { .tile { padding:10px 5px; } .tile .value { font-size:.9rem; } }
+  `;
+  class HaFuelioCard extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this._open = { annual: false, tripstats: false, costs: false, fuel: false, records: false, service: false, version: false };
+      this._month = null;
+      this._year = null;
+      this._tripLevel = "year";
+      this._tripYear = null;
+      this._tripMonth = null;
+      this._tripWeek = null;
+      this._tripDay = null;
+      this._tripGraphOpen = false;
+      this._tripGraphMetric = "distance";
+      this._overviewOpen = { odometer: false, fuel: false, booked: false, drivecost: false };
+      this._chart = null;
+      this._rangeDialog = false;
+      this._rangeError = "";
+      this._signature = null;
+      this.shadowRoot.addEventListener("click", async (event) => {
+        const openCalibration = event.target.closest?.("[data-range-calibrate]");
+        const isOpenCalibration = openCalibration?.dataset &&
+          Object.prototype.hasOwnProperty.call(openCalibration.dataset, "rangeCalibrate");
+        if (isOpenCalibration) {
+          this._rangeDialog = true;
+          this._rangeError = "";
+          this._render();
+          return;
+        }
+        const closeCalibration = event.target.closest?.("[data-range-close]");
+        const isCloseCalibration = closeCalibration?.dataset &&
+          Object.prototype.hasOwnProperty.call(closeCalibration.dataset, "rangeClose");
+        if (isCloseCalibration || event.target?.classList?.contains?.("calibration-backdrop")) {
+          this._rangeDialog = false;
+          this._rangeError = "";
+          this._render();
+          return;
+        }
+        const clearCalibration = event.target.closest?.("[data-range-clear]");
+        const isClearCalibration = clearCalibration?.dataset &&
+          Object.prototype.hasOwnProperty.call(clearCalibration.dataset, "rangeClear");
+        if (isClearCalibration) {
+          try {
+            await this._callRangeService("clear_range_calibration");
+            this._rangeDialog = false;
+            this._rangeError = "";
+          } catch (error) {
+            this._rangeError = error?.message || "Kunde inte återställa kalibreringen.";
+          }
+          this._render();
+          return;
+        }
+        const close = event.target.closest?.("[data-chart-close]");
+        const isClose = close?.dataset && Object.prototype.hasOwnProperty.call(close.dataset, "chartClose");
+        if (isClose || event.target?.classList?.contains?.("chart-backdrop")) {
+          this._chart = null;
+          this._render();
+          return;
+        }
+        const overviewToggle = event.target.closest?.("[data-overview-section]");
+        const overviewSection = overviewToggle?.dataset?.overviewSection;
+        if (overviewSection && Object.prototype.hasOwnProperty.call(this._overviewOpen, overviewSection)) {
+          this._overviewOpen[overviewSection] = !this._overviewOpen[overviewSection];
+          this._render();
+          return;
+        }
+        const tripGraphToggle = event.target.closest?.("[data-trip-graph-toggle]");
+        const isTripGraphToggle = tripGraphToggle?.dataset &&
+          Object.prototype.hasOwnProperty.call(tripGraphToggle.dataset, "tripGraphToggle");
+        if (isTripGraphToggle) {
+          this._tripGraphOpen = !this._tripGraphOpen;
+          this._render();
+          return;
+        }
+        const chartTarget = event.target.closest?.("[data-chart]");
+        if (chartTarget?.dataset?.chart) {
+          const chartId = chartTarget.dataset.chart;
+          const tripKey = this._tripLevel === "year" ? this._tripYear :
+            this._tripLevel === "month" ? this._tripMonth :
+            this._tripLevel === "week" ? this._tripWeek : this._tripDay;
+          this._chart = {
+            id: chartId,
+            year: chartTarget.dataset.chartYear || this._year || String(new Date().getFullYear()),
+            tripLevel: chartId.startsWith("trip-") ? this._tripLevel : null,
+            tripKey: chartId.startsWith("trip-") ? tripKey : null,
+          };
+          this._render();
+          return;
+        }
+        const button = event.target.closest?.("button[data-section]");
+        if (!button) return;
+        const section = button.dataset.section;
+        if (!Object.prototype.hasOwnProperty.call(this._open, section)) return;
+        this._open[section] = !this._open[section];
+        this._render();
+      });
+      this.shadowRoot.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && this._rangeDialog) {
+          this._rangeDialog = false;
+          this._rangeError = "";
+          this._render();
+          return;
+        }
+        if (event.key === "Escape" && this._chart) {
+          this._chart = null;
+          this._render();
+          return;
+        }
+        if ((event.key === "Enter" || event.key === " ") && event.target?.matches?.(".category-chart[data-chart]")) {
+          event.preventDefault();
+          this._chart = {
+            id: event.target.dataset.chart,
+            year: event.target.dataset.chartYear || this._year || String(new Date().getFullYear()),
+          };
+          this._render();
+        }
+      });
+      this.shadowRoot.addEventListener("change", (event) => {
+        const candidate = event.target?.value;
+        if (event.target?.id === "fuelio-month") {
+          const available = this._months();
+          if (available.some((item) => item.month === candidate)) {
+            this._month = candidate;
+            this._render();
+          }
+          return;
+        }
+        if (event.target?.id === "fuelio-year") {
+          const available = this._years();
+          if (available.some((item) => String(item.year) === candidate)) {
+            this._year = candidate;
+            this._render();
+          }
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-level") {
+          if (["year","month","week","day"].includes(candidate)) {
+            this._tripLevel = candidate;
+            this._render();
+          }
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-year") {
+          this._tripYear = candidate;
+          this._tripMonth = null;
+          this._tripWeek = null;
+          this._tripDay = null;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-month") {
+          this._tripMonth = candidate;
+          this._tripWeek = null;
+          this._tripDay = null;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-week") {
+          this._tripWeek = candidate;
+          this._tripDay = null;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-day") {
+          this._tripDay = candidate;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-graph-metric") {
+          if (["distance","count","duration","average"].includes(candidate)) {
+            this._tripGraphMetric = candidate;
+            this._render();
+          }
+        }
+      });
+      this.shadowRoot.addEventListener("submit", async (event) => {
+        if (event.target?.id !== "fuelio-range-calibration-form") return;
+        event.preventDefault();
+        const input = event.target.querySelector?.("#fuelio-range-km");
+        const rangeKm = Number(input?.value);
+        if (!Number.isFinite(rangeKm) || rangeKm <= 0 || rangeKm > 5000) {
+          this._rangeError = "Ange en räckvidd mellan 1 och 5 000 km.";
+          this._render();
+          return;
+        }
+        try {
+          await this._callRangeService("calibrate_range", { range_km: rangeKm });
+          this._rangeDialog = false;
+          this._rangeError = "";
+        } catch (error) {
+          this._rangeError = error?.message || "Kalibreringen misslyckades.";
+        }
+        this._render();
+      });
+    }
+
+    setConfig(config) {
+      if (!config || typeof config.entity !== "string" || !/^sensor\.[a-z0-9_]+_monthly_cost_breakdown$/.test(config.entity)) {
+        throw new Error("Fuelio Card: ange entity: sensor.DIN_BIL_monthly_cost_breakdown");
+      }
+      this._config = { ...config };
+      this._prefix = config.entity.slice(0, -"monthly_cost_breakdown".length);
+      this._signature = null;
+      this._render();
+    }
+
+    static getStubConfig() { return { entity: "sensor.din_bil_monthly_cost_breakdown" }; }
+    getCardSize() { return 10; }
+
+    set hass(hass) {
+      this._hass = hass;
+      if (!this._config) return;
+      const sensorKeys = [
+        "monthly_cost_breakdown", "latest_odometer_km", "trip_count", "trip_distance_km", "trip_duration_hours",
+        "last_fuel_up_date", "last_fillup_date", "last_fuel_price", "last_reported_consumption", "fuel_count",
+        "fuel_litres", "fuel_cost", "other_expenses", "total_actual_cost", "estimated_trip_cost", "last_trip_date",
+        "fuel_count_month", "fuel_count_year", "fuel_cost_per_km_month", "total_cost_per_km_month",
+        "fuel_cost_per_km_year", "total_cost_per_km_year", "fuel_cost_per_km_all", "total_cost_per_km_all",
+        "fuel_price_min_year", "fuel_price_max_year", "fuel_price_min_all", "fuel_price_max_all",
+        "consumption_min_year", "consumption_max_year", "consumption_min_all", "consumption_max_all",
+        "distance_since_last_fillup_km", "estimated_fuel_remaining_l", "estimated_range_remaining_km",
+        "estimated_days_to_next_fillup", "estimated_next_fillup_date", "last_app_sync",
+      ];
+      // React only when Fuelio values change, not on every unrelated HA state update.
+      const signature = sensorKeys.map((key) => {
+        const entry = this._state(key);
+        return entry ? `${entry.state}|${entry.last_updated || ""}|${key === "monthly_cost_breakdown" ? JSON.stringify([entry.attributes?.months || [], entry.attributes?.years || [], entry.attributes?.categories_all || [], entry.attributes?.trip_statistics || {}]) : (entry.attributes?.recorded_on || "")}` : "missing";
+      }).join(";");
+      if (signature === this._signature) return;
+      this._signature = signature;
+      this._render();
+    }
+
+    _resolveId(key) {
+    const states = this._hass?.states || {};
+    const registry = this._hass?.entities || {};
+    const suffix = ENTITY_SLUGS[key] || key;
+    // The configured monthly ID may not actually exist when an upgrade gives
+    // the nine new sensors a different device-name prefix.
+    const reference = registry[this._config?.entity] || registry[this._prefix + "last_fuel_price"];
+    const device = reference?.platform === "fuelio" ? reference.device_id : null;
+    const allowed = (id) => !device || !registry[id] ||
+      (registry[id].platform === "fuelio" && registry[id].device_id === device);
+    const exactIds = [key === "monthly_cost_breakdown" ? this._config?.entity : null,
+      this._prefix + suffix, this._prefix + key];
+    for (const id of exactIds) {
+      if (id && states[id] && allowed(id)) return id;
+    }
+    // Match the *same device*, never another configured vehicle. Unique IDs
+    // survive user entity renames; generated name slugs are the fallback.
+    if (!device) return null;
+    const matches = Object.values(registry).filter((entry) => entry &&
+      entry.platform === "fuelio" && entry.device_id === device && states[entry.entity_id] &&
+      ((typeof entry.unique_id === "string" && entry.unique_id.endsWith("_" + key)) ||
+        entry.entity_id.endsWith("_" + suffix) || entry.entity_id.endsWith("_" + key)));
+    return matches.length === 1 ? matches[0].entity_id : null;
+  }
+  _state(key) { const id = this._resolveId(key); return id ? this._hass?.states?.[id] : undefined; }
+    _value(key) { return num(this._state(key)); }
+    _months() {
+      const rows = this._state("monthly_cost_breakdown")?.attributes?.months;
+      if (!Array.isArray(rows)) return [];
+      return rows.filter((row) => row && /^\d{4}-(0[1-9]|1[0-2])$/.test(row.month) &&
+        ["fuel", "other", "total"].every((key) => Number.isFinite(row[key]))).slice(0, 120);
+    }
+    _years() {
+      const rows = this._state("monthly_cost_breakdown")?.attributes?.years;
+      if (!Array.isArray(rows)) return [];
+      return rows.filter((row) => row && /^\d{4}$/.test(String(row.year)) &&
+        ["fuel", "other", "total"].every((key) => Number.isFinite(row[key]))).slice(0, 40);
+    }
+    _tripStats() {
+      const stats = this._state("monthly_cost_breakdown")?.attributes?.trip_statistics;
+      return stats && typeof stats === "object" ? stats : { years: [], months: [], weeks: [], days: [] };
+    }
+    _tripRows(level) {
+      const rows = this._tripStats()?.[`${level}s`];
+      return Array.isArray(rows) ? rows : [];
+    }
+    _tripRow(level, key) {
+      const field = level === "day" ? "date" : level;
+      return this._tripRows(level).find((row) => String(row?.[field]) === String(key)) || null;
+    }
+    _tripSelect(label, id, values, selected, formatter = (value) => value) {
+      const options = values.map((value) => `<option value="${esc(String(value))}" ${String(value) === String(selected) ? "selected" : ""}>${esc(formatter(value))}</option>`).join("");
+      return `<label class="select-label" for="${id}">${esc(label)}</label><select id="${id}" ${values.length ? "" : "disabled"}>${options}</select>`;
+    }
+    _tripSummary(row, label) {
+      if (!row) return `<div class="notice">Ingen resestatistik för vald period.</div>`;
+      const odoDetail = row.odo_coverage === "partial_start" ? "Delperiod" :
+        row.odo_start_on && row.odo_end_on ? `${row.odo_start_on} → ${row.odo_end_on}` : "ODO-underlag saknas";
+      return `<div class="section-title">${esc(label)}</div><div class="grid">
+        ${this._tile("🧭", "TripDist", decimal(row.trip_km, "km"), "Fuelio TripDist")}
+        ${this._tile("🛣️", "ODO-sträcka", decimal(row.odo_km, "km"), odoDetail)}
+        ${this._tile("🚙", "Antal resor", decimal(row.trip_count, "st"))}
+        ${this._tile("⏱️", "Körtid", decimal(row.duration_hours, "h"))}
+        ${this._tile("📏", "Snitt/resa", decimal(row.average_trip_km, "km"))}
+      </div>`;
+    }
+    _maintenanceTotal(categories) {
+      if (!Array.isArray(categories)) return 0;
+      return categories.reduce((sum, item) => {
+        const name = String(item?.name || "").trim().toLocaleLowerCase("sv-SE");
+        const amount = Number(item?.amount);
+        const maintenance = name.includes("underhåll") || name.includes("service") || name.includes("reparation");
+        return maintenance && Number.isFinite(amount) ? sum + amount : sum;
+      }, 0);
+    }
+    _chartAttrs(chart, year) {
+      if (!chart) return "";
+      const safeYear = /^\d{4}$/.test(String(year || "")) ? String(year) : "";
+      return ` data-chart="${esc(chart)}"${safeYear ? ` data-chart-year="${safeYear}"` : ""}`;
+    }
+    _tile(icon, label, value, detail = "", chart = null, year = null) {
+      const inner = `<span class="ico" aria-hidden="true">${icon}</span><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}`;
+      return chart
+        ? `<button type="button" class="tile chart-action"${this._chartAttrs(chart, year)} aria-label="${esc(label)} – visa graf">${inner}</button>`
+        : `<div class="tile">${inner}</div>`;
+    }
+    _kpi(icon, label, value, detail = "", chart = null, year = null) {
+      const inner = `<div class="label">${icon} ${esc(label)}</div><div class="value">${esc(value)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}`;
+      return chart
+        ? `<button type="button" class="kpi chart-action"${this._chartAttrs(chart, year)} aria-label="${esc(label)} – visa graf">${inner}</button>`
+        : `<div class="kpi">${inner}</div>`;
+    }
+    _monthsForYear(year) {
+      return this._months().filter((row) => row.month.startsWith(`${year}-`)).sort((a, b) => a.month.localeCompare(b.month));
+    }
+    _monthLabel(key) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key || ""))) return "—";
+      return new Intl.DateTimeFormat("sv-SE", { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
+    }
+    _chartNumber(value) {
+      if (value === null || value === undefined || value === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    _chartGrid(maxValue, left, top, plotWidth, plotHeight, unit = "") {
+      const scaleMax = Math.max(Number(maxValue) || 0, 1);
+      return Array.from({ length:5 }, (_, index) => {
+        const ratio = index / 4;
+        const y = top + plotHeight - ratio * plotHeight;
+        const value = scaleMax * ratio;
+        return `<line class="gridline" x1="${left}" y1="${y}" x2="${left + plotWidth}" y2="${y}"></line><text x="${left - 10}" y="${y + 4}" text-anchor="end">${esc(fmt.format(value))}${unit ? ` ${esc(unit)}` : ""}</text>`;
+      }).join("");
+    }
+    _barChart(rows, series, unit = "", stacked = false) {
+      if (!rows.length) return `<div class="chart-empty">Ingen månadsdata för valt år.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const totals = rows.map((row) => stacked
+        ? series.reduce((sum, item) => sum + (this._chartNumber(row[item.key]) ?? 0), 0)
+        : Math.max(...series.map((item) => this._chartNumber(row[item.key]) ?? 0)));
+      const maxValue = Math.max(...totals, 1) * 1.1;
+      const step = plotWidth / rows.length;
+      const groupWidth = Math.min(step * .68, 62);
+      const barWidth = stacked ? groupWidth : groupWidth / Math.max(series.length, 1);
+      let bars = "";
+      rows.forEach((row, rowIndex) => {
+        let accumulated = 0;
+        series.forEach((item, seriesIndex) => {
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) return;
+          const h = value / maxValue * plotHeight;
+          const x = left + rowIndex * step + (step - groupWidth) / 2 + (stacked ? 0 : seriesIndex * barWidth);
+          const y = stacked ? top + plotHeight - (accumulated + value) / maxValue * plotHeight : top + plotHeight - h;
+          bars += `<rect class="${seriesIndex === 0 ? "series-a-fill" : "series-b-fill"}" x="${x}" y="${y}" width="${Math.max(barWidth - (stacked ? 0 : 2), 3)}" height="${Math.max(h, 0)}" rx="4"><title>${esc(monthName(row.month))} · ${esc(item.label)}: ${esc(decimal(value, unit))}</title></rect>`;
+          if (stacked) accumulated += value;
+        });
+        bars += `<text x="${left + rowIndex * step + step / 2}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(this._monthLabel(row.month))}</text>`;
+      });
+      const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
+      return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}</svg></div>`;
+    }
+    _lineChart(rows, series, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen månadsdata för valt år.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const values = rows.flatMap((row) => series.map((item) => this._chartNumber(row[item.key])).filter((value) => value !== null));
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = rows.length > 1 ? plotWidth / (rows.length - 1) : plotWidth;
+      let shapes = "";
+      series.forEach((item, seriesIndex) => {
+        let segment = [];
+        const flush = () => {
+          if (segment.length > 1) shapes += `<polyline class="${seriesIndex === 0 ? "series-a-line" : "series-b-line"}" points="${segment.join(" ")}"></polyline>`;
+          segment = [];
+        };
+        rows.forEach((row, rowIndex) => {
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) { flush(); return; }
+          const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+          const y = top + plotHeight - value / maxValue * plotHeight;
+          segment.push(`${x},${y}`);
+          shapes += `<circle class="${seriesIndex === 0 ? "series-a-dot" : "series-b-dot"}" cx="${x}" cy="${y}" r="5"><title>${esc(monthName(row.month))} · ${esc(item.label)}: ${esc(decimal(value, unit))}</title></circle>`;
+        });
+        flush();
+      });
+      const labels = rows.map((row,rowIndex) => {
+        const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+        return `<text x="${x}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(this._monthLabel(row.month))}</text>`;
+      }).join("");
+      const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
+      return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${shapes}${labels}</svg></div>`;
+    }
+    _tripChartRows(level, key) {
+      const stats = this._tripStats();
+      if (level === "year") {
+        return (stats.months || []).filter((row) => String(row.month).startsWith(`${key}-`)).sort((a,b) => String(a.month).localeCompare(String(b.month)));
+      }
+      if (level === "month") {
+        const start = `${key}-01`;
+        const [year, month] = String(key).split("-").map(Number);
+        const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0,10);
+        return (stats.weeks || []).filter((row) => String(row.end) >= start && String(row.start) <= end).sort((a,b) => String(a.week).localeCompare(String(b.week)));
+      }
+      if (level === "week") {
+        const week = (stats.weeks || []).find((row) => String(row.week) === String(key));
+        if (!week) return [];
+        return (stats.days || []).filter((row) => String(row.date) >= String(week.start) && String(row.date) <= String(week.end)).sort((a,b) => String(a.date).localeCompare(String(b.date)));
+      }
+      return [];
+    }
+    _tripChartLabel(row, level) {
+      if (level === "year") return this._monthLabel(row.month);
+      if (level === "month") return `v${String(row.week || "").slice(-2)}`;
+      if (level === "week") {
+        const parsed = new Date(`${row.date}T12:00:00Z`);
+        return new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"numeric", timeZone:"UTC" }).format(parsed).replace(".", "");
+      }
+      return "";
+    }
+    _tripLineChart(rows, level, series, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen underliggande resedata för vald period.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const values = rows.flatMap((row) => series.map((item) => this._chartNumber(row[item.key])).filter((value) => value !== null));
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = rows.length > 1 ? plotWidth / (rows.length - 1) : plotWidth;
+      let shapes = "";
+      series.forEach((item, seriesIndex) => {
+        let segment = [];
+        const flush = () => {
+          if (segment.length > 1) shapes += `<polyline class="${seriesIndex === 0 ? "series-a-line" : "series-b-line"}" points="${segment.join(" ")}"></polyline>`;
+          segment = [];
+        };
+        rows.forEach((row, rowIndex) => {
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) { flush(); return; }
+          const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+          const y = top + plotHeight - value / maxValue * plotHeight;
+          const label = this._tripChartLabel(row, level);
+          segment.push(`${x},${y}`);
+          shapes += `<circle class="${seriesIndex === 0 ? "series-a-dot" : "series-b-dot"}" cx="${x}" cy="${y}" r="5"><title>${esc(label)} · ${esc(item.label)}: ${esc(decimal(value, unit))}</title></circle>`;
+        });
+        flush();
+      });
+      const labels = rows.map((row,rowIndex) => {
+        const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+        return `<text x="${x}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(this._tripChartLabel(row, level))}</text>`;
+      }).join("");
+      const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
+      return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${shapes}${labels}</svg></div>`;
+    }
+    _tripBarChart(rows, level, key, label, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen underliggande resedata för vald period.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const values = rows.map((row) => this._chartNumber(row[key]) ?? 0);
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = plotWidth / rows.length;
+      const barWidth = Math.min(step * .62, 62);
+      const bars = rows.map((row,index) => {
+        const value = this._chartNumber(row[key]);
+        const x = left + index * step + (step - barWidth) / 2;
+        const h = value === null ? 0 : value / maxValue * plotHeight;
+        const y = top + plotHeight - h;
+        const xLabel = this._tripChartLabel(row, level);
+        return `<rect class="series-a-fill" x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4"><title>${esc(xLabel)} · ${esc(label)}: ${esc(decimal(value, unit))}</title></rect><text x="${left + index * step + step / 2}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(xLabel)}</text>`;
+      }).join("");
+      return `<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}</svg></div>`;
+    }
+    _rollingAverage(rows, key, windowSize = 3) {
+      return rows.map((row, index) => {
+        const start = Math.max(0, index - windowSize + 1);
+        const values = rows.slice(start, index + 1)
+          .map((item) => this._chartNumber(item[key]))
+          .filter((value) => value !== null);
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+      });
+    }
+    _tripBarAverageChart(rows, level, key, label, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen underliggande resedata för vald period.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const raw = rows.map((row) => this._chartNumber(row[key]));
+      const average = this._rollingAverage(rows, key, 3);
+      const values = [...raw, ...average].filter((value) => value !== null);
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = plotWidth / rows.length;
+      const barWidth = Math.min(step * .56, 58);
+      const points = [];
+      const bars = rows.map((row,index) => {
+        const value = raw[index];
+        const x = left + index * step + (step - barWidth) / 2;
+        const h = value === null ? 0 : value / maxValue * plotHeight;
+        const y = top + plotHeight - h;
+        const xLabel = this._tripChartLabel(row, level);
+        const avg = average[index];
+        if (avg !== null) {
+          const px = left + index * step + step / 2;
+          const py = top + plotHeight - avg / maxValue * plotHeight;
+          points.push(`${px},${py}`);
+        }
+        return `<rect class="series-a-fill" x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4"><title>${esc(xLabel)} · ${esc(label)}: ${esc(decimal(value, unit))}</title></rect><text x="${left + index * step + step / 2}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(xLabel)}</text>`;
+      }).join("");
+      const averageLine = points.length > 1 ? `<polyline class="series-b-line" points="${points.join(" ")}"></polyline>` : "";
+      const averageDots = rows.map((row,index) => {
+        const avg = average[index];
+        if (avg === null) return "";
+        const x = left + index * step + step / 2;
+        const y = top + plotHeight - avg / maxValue * plotHeight;
+        return `<circle class="series-b-dot" cx="${x}" cy="${y}" r="4"><title>${esc(this._tripChartLabel(row, level))} · Rullande 3-perioders medel: ${esc(decimal(avg, unit))}</title></circle>`;
+      }).join("");
+      return `<div class="chart-legend"><span>${esc(label)}</span><span>Rullande 3-perioders medel</span></div><div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}${averageLine}${averageDots}</svg></div>`;
+    }
+    _tripInlineGraph(level, key) {
+      if (level === "day") return `<div class="notice">Dag är bottennivån. Graf per enskild resa kräver en separat resedatamodell och visas därför inte här.</div>`;
+      const rows = this._tripChartRows(level, key);
+      const period = this._tripChartPeriodLabel(level, key);
+      const sublevel = level === "year" ? "månad" : level === "month" ? "vecka" : "dag";
+      let content = "", note = "";
+      if (this._tripGraphMetric === "distance") {
+        content = this._tripLineChart(rows, level, [{key:"trip_km",label:"TripDist"},{key:"odo_km",label:"ODO-sträcka"}], "km");
+        note = `${period} uppdelat per ${sublevel}. TripDist och ODO visas utan rullande medel för att behålla jämförelsen ren.`;
+      } else if (this._tripGraphMetric === "count") {
+        content = this._tripBarAverageChart(rows, level, "trip_count", "Antal resor", "st");
+        note = `${period} uppdelat per ${sublevel}. Staplar = faktisk period, linje = rullande 3-perioders medel.`;
+      } else if (this._tripGraphMetric === "duration") {
+        content = this._tripBarAverageChart(rows, level, "duration_hours", "Körtid", "h");
+        note = `${period} uppdelat per ${sublevel}. Staplar = faktisk period, linje = rullande 3-perioders medel.`;
+      } else {
+        content = this._tripBarAverageChart(rows, level, "average_trip_km", "Snitt/resa", "km");
+        note = `${period} uppdelat per ${sublevel}. Staplar = faktisk period, linje = rullande 3-perioders medel.`;
+      }
+      return `<label class="select-label" for="fuelio-trip-graph-metric">Graf</label><select id="fuelio-trip-graph-metric">
+        <option value="distance" ${this._tripGraphMetric === "distance" ? "selected" : ""}>TripDist vs ODO-sträcka</option>
+        <option value="count" ${this._tripGraphMetric === "count" ? "selected" : ""}>Antal resor</option>
+        <option value="duration" ${this._tripGraphMetric === "duration" ? "selected" : ""}>Körtid</option>
+        <option value="average" ${this._tripGraphMetric === "average" ? "selected" : ""}>Snitt per resa</option>
+      </select><div class="trip-graph-inline">${content}</div><div class="notice">${esc(note)}</div>`;
+    }
+
+    _tripChartPeriodLabel(level, key) {
+      if (level === "year") return `År ${key}`;
+      if (level === "month") return monthName(String(key));
+      if (level === "week") return `Vecka ${String(key).slice(-2)} · ${String(key).slice(0,4)}`;
+      return String(key || "");
+    }
+
+    _categoryChart(rows) {
+      const values = Array.isArray(rows) ? rows.filter((row) => row && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0) : [];
+      if (!values.length) return `<div class="chart-empty">Inga kategoriserade utgifter för valt år.</div>`;
+      const width = 900, rowHeight = 44, left = 220, right = 100, top = 18, bottom = 20;
+      const height = top + bottom + values.length * rowHeight;
+      const plotWidth = width - left - right;
+      const maxValue = Math.max(...values.map((row) => Number(row.amount)), 1);
+      const body = values.map((row,index) => {
+        const value = Number(row.amount);
+        const y = top + index * rowHeight;
+        const barWidth = value / maxValue * plotWidth;
+        return `<text class="axis-strong" x="${left - 12}" y="${y + 25}" text-anchor="end">${esc(row.name)}</text><rect class="series-a-fill" x="${left}" y="${y + 8}" width="${barWidth}" height="24" rx="6"><title>${esc(row.name)}: ${esc(kroner(value))}</title></rect><text x="${left + plotWidth + 12}" y="${y + 25}">${esc(kroner(value))}</text>`;
+      }).join("");
+      return `<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${body}</svg></div>`;
+    }
+    _chartModal() {
+      if (!this._chart) return "";
+      const year = /^\d{4}$/.test(String(this._chart.year || "")) ? String(this._chart.year) : String(new Date().getFullYear());
+      const months = this._monthsForYear(year);
+      const annual = this._years().find((row) => String(row.year) === year);
+      let title = "Graf", content = "", note = "";
+      if (this._chart.id.startsWith("trip-")) {
+        const level = this._chart.tripLevel;
+        const key = this._chart.tripKey;
+        const rows = this._tripChartRows(level, key);
+        const period = this._tripChartPeriodLabel(level, key);
+        const sublevel = level === "year" ? "månad" : level === "month" ? "vecka" : "dag";
+        if (this._chart.id === "trip-distance") {
+          title = "🧭 TripDist vs ODO-sträcka";
+          content = this._tripLineChart(rows, level, [{key:"trip_km",label:"TripDist"},{key:"odo_km",label:"ODO-sträcka"}], "km");
+          note = `${period} uppdelat per ${sublevel}. TripDist är Fuelios loggade/GPS-baserade körsträcka; ODO kommer från mätarställnings-checkpoints.`;
+        } else if (this._chart.id === "trip-count") {
+          title = "🚙 Antal resor";
+          content = this._tripBarChart(rows, level, "trip_count", "Antal resor", "st");
+          note = `${period} uppdelat per ${sublevel}.`;
+        } else if (this._chart.id === "trip-duration") {
+          title = "⏱️ Körtid";
+          content = this._tripLineChart(rows, level, [{key:"duration_hours",label:"Körtid"}], "h");
+          note = `${period} uppdelat per ${sublevel}.`;
+        } else if (this._chart.id === "trip-average") {
+          title = "📏 Snitt per resa";
+          content = this._tripLineChart(rows, level, [{key:"average_trip_km",label:"Snitt/resa"}], "km");
+          note = `${period} uppdelat per ${sublevel}. Snittet är TripDist ÷ antal loggade resor.`;
+        }
+      } else if (this._chart.id === "costs") {
+        title = "💳 Kostnader per månad";
+        content = this._barChart(months, [{key:"fuel",label:"Bränsle"},{key:"other",label:"Övrigt"}], "kr", true);
+        note = "Staplarna visar bokförda kostnader på betalnings-/tankningsdatum. Bränsle och övriga utgifter är staplade.";
+      } else if (this._chart.id === "distance") {
+        title = "🛣️ Avläst körsträcka per månad";
+        content = this._barChart(months, [{key:"km",label:"ODO-körsträcka"}], "km");
+        note = "Körsträckan bygger på Fuelios ODO-checkpoints. Första importerade månaden kan vara en delperiod.";
+      } else if (this._chart.id === "litres") {
+        title = "🛢️ Tankad volym per månad";
+        content = this._barChart(months, [{key:"litres",label:"Tankade liter"}], "L");
+        note = "Visar inköpt bränsle per månad, inte beräknat förbrukat bränsle.";
+      } else if (this._chart.id === "cost-per-km") {
+        title = "📏 Kostnad per avläst ODO-km";
+        content = this._lineChart(months, [{key:"total_per_logged_km",label:"Bokfört totalt/km"},{key:"estimated_total_per_km",label:"Beräknad total/km"}], "kr/km");
+        note = "Bokfört värde är faktiska utgifter ÷ ODO-differens. Beräknat värde använder uppskattad kostnad för förbrukat bränsle plus bokförda övriga utgifter.";
+      } else if (this._chart.id === "categories") {
+        title = "🧾 Utgifter per kategori";
+        content = this._categoryChart(annual?.categories);
+        note = "Kategorierna är årsaggregat från Fuelio. Mallposter och inkomster ingår inte.";
+      } else {
+        content = `<div class="chart-empty">Grafen är inte tillgänglig ännu.</div>`;
+      }
+      const chartContext = this._chart.id.startsWith("trip-") ? this._tripChartPeriodLabel(this._chart.tripLevel, this._chart.tripKey) : `År ${year}`;
+      return `<div class="chart-backdrop"><section class="chart-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="chart-head"><div><h3>${esc(title)}</h3><div class="muted">${esc(chartContext)}</div></div><button type="button" class="chart-close" data-chart-close aria-label="Stäng graf">✕</button></div><div class="chart-body">${content}</div>${note ? `<div class="chart-note">${esc(note)}</div>` : ""}</section></div>`;
+    }
+    _panel(icon, title, rows) {
+      return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
+        `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
+    }
+    _overviewExpander(id, icon, title, summaries, rows) {
+      const open = this._overviewOpen[id] === true;
+      const summary = summaries.map(([label, value]) => `<span>${esc(label)} <strong>${esc(value)}</strong></span>`).join("");
+      const body = rows.map(([label, value, note]) =>
+        `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("");
+      return `<section class="overview-expander"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-summary">${summary}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body">${body}</div>` : ""}</section>`;
+    }
+    _rangeServiceEntity() {
+      return this._resolveId("estimated_range_remaining_km") || this._config?.entity || null;
+    }
+    async _callRangeService(service, data = {}) {
+      const entityId = this._rangeServiceEntity();
+      if (!entityId || !this._hass?.callService) throw new Error("Fuelio-entiteten är inte tillgänglig.");
+      await this._hass.callService("fuelio", service, { entity_id: entityId, ...data });
+    }
+    _rangeCalibrationModal(forecast) {
+      if (!this._rangeDialog) return "";
+      const current = this._value("estimated_range_remaining_km");
+      const manual = forecast?.manual_calibration_active === true;
+      const basis = Number(forecast?.consumption_basis_l_per_100km);
+      const automatic = Number(forecast?.automatic_consumption_basis_l_per_100km);
+      const inputValue = Number.isFinite(current) ? Math.max(1, Math.round(current)) : "";
+      return `<div class="calibration-backdrop">
+        <form id="fuelio-range-calibration-form" class="calibration-modal">
+          <h3>🎯 Kalibrera teoretisk räckvidd</h3>
+          <p>Ange den återstående räckvidd som bilens färddator visar just nu. HA-Fuelio räknar om förbrukningsunderlaget för den aktuella tanken utan att skriva något tillbaka till Fuelio.</p>
+          <div class="calibration-field">
+            <label for="fuelio-range-km">Bilens räckvidd just nu</label>
+            <input id="fuelio-range-km" name="range_km" type="number" min="1" max="5000" step="1" inputmode="numeric" value="${esc(inputValue)}" required>
+          </div>
+          <div class="calibration-meta">
+            <span>Nuvarande prognos: <strong>${esc(decimal(current, "km"))}</strong></span>
+            <span>Aktuellt förbrukningsunderlag: <strong>${esc(decimal(basis, "L/100 km"))}</strong></span>
+            ${manual && Number.isFinite(automatic) ? `<span>Automatiskt Fuelio-underlag: <strong>${esc(decimal(automatic, "L/100 km"))}</strong></span>` : ""}
+            <span>Kalibreringen släpps automatiskt vid nästa registrerade primärtankning.</span>
+          </div>
+          ${this._rangeError ? `<div class="calibration-error">${esc(this._rangeError)}</div>` : ""}
+          <div class="calibration-buttons">
+            <button type="button" data-range-close>Avbryt</button>
+            ${manual ? `<button type="button" data-range-clear>Återställ automatisk</button>` : ""}
+            <button type="submit" class="primary">Kalibrera</button>
+          </div>
+        </form>
+      </div>`;
+    }
+    _rangePanel(forecast) {
+      const remaining = this._value("estimated_fuel_remaining_l");
+      const capacity = Number(forecast?.tank_capacity_l);
+      const percent = Number.isFinite(remaining) && Number.isFinite(capacity) && capacity > 0
+        ? Math.max(0, Math.min(100, remaining / capacity * 100)) : null;
+      const manual = forecast?.manual_calibration_active === true;
+      const canCalibrate = Number.isFinite(Number(forecast?.fuel_available_since_calibration_l)) &&
+        Number.isFinite(Number(forecast?.distance_since_calibration_km));
+      const status = manual ? "Manuellt kalibrerad" :
+        forecast?.confidence === "normal" ? "Kalibrerad" :
+        forecast?.confidence === "limited" ? "Begränsat underlag" : "Estimat";
+      return `<section class="range-panel">
+        <div class="range-head">
+          <h3>🧭 Tank & räckvidd</h3>
+          <div class="range-actions">
+            <span class="pill">${esc(status)}</span>
+            <button type="button" class="range-calibrate" data-range-calibrate ${canCalibrate ? "" : "disabled"}>🎯 Kalibrera</button>
+          </div>
+        </div>
+        <div class="range-main">
+          <div class="range-stat"><span>Bränsle kvar</span><strong>${esc(decimal(remaining, "L"))}</strong></div>
+          <div class="range-stat"><span>Teoretisk räckvidd</span><strong>${esc(decimal(this._value("estimated_range_remaining_km"), "km"))}</strong></div>
+          <div class="range-stat"><span>Sedan senaste tankning</span><strong>${esc(decimal(this._value("distance_since_last_fillup_km"), "km"))}</strong></div>
+          <div class="range-stat"><span>Nästa tankning</span><strong>${esc(date(this._state("estimated_next_fillup_date")?.state))}</strong></div>
+        </div>
+        <div>
+          <div class="fuel-meter"><span style="width:${Number.isFinite(percent) ? percent.toFixed(1) : 0}%"></span></div>
+          <div class="fuel-meter-note"><span>${Number.isFinite(percent) ? `Ca ${fmt.format(percent)} % kvar` : "Tanknivå saknas"}</span><span>${Number.isFinite(this._value("estimated_days_to_next_fillup")) ? `${decimal(this._value("estimated_days_to_next_fillup"), "dagar")} kvar` : "Körtempo saknas"}</span></div>
+        </div>
+        ${manual ? `<div class="range-manual-note">🎯 Tillfälligt förbrukningsunderlag: <strong>${esc(decimal(Number(forecast?.consumption_basis_l_per_100km), "L/100 km"))}</strong>. Återgår automatiskt till Fuelio vid nästa primärtankning.</div>` : ""}
+      </section>`;
+    }
+    _section(id, icon, title, inner) {
+      const open = this._open[id];
+      return `<section class="section section-${id}"><button type="button" data-section="${id}" aria-expanded="${open}" aria-controls="panel-${id}"><span>${icon} ${esc(title)}</span><span aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div id="panel-${id}" class="body">${inner}</div>` : ""}</section>`;
+    }
+    _recordTile(key, title, unit) {
+      const entry = this._state(key);
+      const day = entry?.attributes?.recorded_on;
+      return this._tile(key.includes("min") ? "↘️" : "↗️", title, decimal(num(entry), unit), date(day));
+    }
+    _render() {
+      if (!this.shadowRoot || !this._config) return;
+      if (!this._hass) {
+        this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">Läser Fuelio …</div></ha-card>`;
+        return;
+      }
+      const allMonths = this._months();
+      if (!this._month || !allMonths.some((row) => row.month === this._month)) this._month = allMonths[0]?.month || null;
+      const selected = allMonths.find((row) => row.month === this._month);
+      const currentYear = selected?.month?.slice(0, 4) || allMonths[0]?.month?.slice(0, 4) || String(new Date().getFullYear());
+      const allYears = this._years();
+      const selectedYear = allYears.find((item) => String(item.year) === currentYear) || null;
+      if (!this._year || !allYears.some((item) => String(item.year) === this._year)) {
+        this._year = String(allYears[0]?.year || currentYear);
+      }
+      const annualYear = allYears.find((item) => String(item.year) === this._year) || null;
+      const yearTotal = selectedYear?.total ?? allMonths.filter((item) => item.month.startsWith(`${currentYear}-`)).reduce((sum, item) => sum + item.total, 0);
+      const categories = (values, heading, chart = null, year = null) => `<div class="section-title">${esc(heading)}</div>${Array.isArray(values) && values.length ? `<div class="category-list${chart ? " category-chart" : ""}"${chart ? `${this._chartAttrs(chart, year)} role="button" tabindex="0" aria-label="${esc(heading)} – visa graf"` : ""}>${values.map((item) => `<div class="category-row"><span>${esc(item.name)}</span><strong>${esc(kroner(item.amount))}</strong></div>`).join("")}${chart ? `<span class="chart-hint">Visa graf ↗</span>` : ""}</div>` : `<div class="notice">Inga kategoriserade utgifter för perioden.</div>`}`;
+      const historyTruncated = this._state("monthly_cost_breakdown")?.attributes?.history_truncated === true;
+      const title = typeof this._config.title === "string" ? this._config.title : "Fuelio · Bilöversikt";
+      const isAvailable = valid(this._state("monthly_cost_breakdown"));
+      // The overview is always the CURRENT calendar month, independent of the
+      // user's separate historical month selector in the Costs section.
+      const nowMonth = allMonths[0];
+      const odoNote = (period) => period?.odo_coverage === "partial_start" ?
+        `Delperiod: ${period.odo_start_on || "första avläsning"} → ${period.odo_end_on || "senaste avläsning"}` :
+        period?.odo_start_on && period?.odo_end_on ? `${period.odo_start_on} → ${period.odo_end_on}` : "Avläsningar saknas";
+      const currentYearData = allYears.find((item) => String(item.year) === String(nowMonth?.month?.slice(0, 4)));
+      const aggregate = this._state("monthly_cost_breakdown")?.attributes || {};
+      const lifetime = aggregate.estimated_lifetime || {};
+      const tripStats = this._tripStats();
+      const tripYears = (tripStats.years || []).map((row) => String(row.year));
+      if (!this._tripYear || !tripYears.includes(String(this._tripYear))) this._tripYear = tripYears[0] || null;
+      const tripMonths = (tripStats.months || []).filter((row) => !this._tripYear || String(row.month).startsWith(`${this._tripYear}-`)).map((row) => String(row.month));
+      if (!this._tripMonth || !tripMonths.includes(String(this._tripMonth))) this._tripMonth = tripMonths[0] || null;
+      const tripWeeks = (tripStats.weeks || []).filter((row) => !this._tripYear || String(row.week).startsWith(`${this._tripYear}-W`)).map((row) => String(row.week));
+      if (!this._tripWeek || !tripWeeks.includes(String(this._tripWeek))) this._tripWeek = tripWeeks[0] || null;
+      const selectedTripWeek = this._tripRow("week", this._tripWeek);
+      const tripDays = (tripStats.days || []).filter((row) => selectedTripWeek ? String(row.date) >= String(selectedTripWeek.start) && String(row.date) <= String(selectedTripWeek.end) : (!this._tripMonth || String(row.date).startsWith(`${this._tripMonth}-`))).map((row) => String(row.date));
+      if (!this._tripDay || !tripDays.includes(String(this._tripDay))) this._tripDay = tripDays[0] || null;
+      const forecast = this._state("estimated_range_remaining_km")?.attributes || {};
+      const coverageText = (row) => row?.estimate_coverage === "missing_rate" ? "Pris-/förbrukningsunderlag saknas" :
+        row?.estimate_coverage?.includes?.("one_consumption_value") ? "En förbrukningsavläsning – begränsat underlag" :
+        row?.odo_coverage === "partial_start" ? "Delperiod från första mätningen" : "Uppskattning";
+      const syncText = dateTime(this._state("last_app_sync")?.state);
+      const kpis = `<div class="kpi-strip">
+        ${this._kpi("🛣️", "Mätarställning", decimal(this._value("latest_odometer_km"), "km"))}
+        ${this._kpi("📍", "Körsträcka denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth), "distance", nowMonth?.month?.slice(0,4))}
+        ${this._kpi("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"))}
+        ${this._kpi("💳", "Utgifter denna månad", kroner(nowMonth?.total), "", "costs", nowMonth?.month?.slice(0,4))}
+        ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth), "cost-per-km", nowMonth?.month?.slice(0,4))}
+        ${this._kpi("🧭", "Räckvidd kvar", decimal(this._value("estimated_range_remaining_km"), "km"))}
+      </div>`;
+      const overview = `<div class="overview">
+        ${this._rangePanel(forecast)}
+        ${this._overviewExpander("odometer", "🛣️", "Mätarställning", [
+          ["Aktuell", decimal(this._value("latest_odometer_km"), "km")],
+          ["Månad", decimal(nowMonth?.km, "km")]
+        ], [
+          ["Denna månad", decimal(nowMonth?.km, "km"), odoNote(nowMonth)],
+          ["I år", decimal(currentYearData?.km, "km"), currentYearData?.odo_coverage === "partial_start" ? "Delperiod" : ""],
+          ["Sedan importstart", decimal(aggregate.lifetime_odometer_km, "km")]
+        ])}
+        ${this._overviewExpander("fuel", "⛽", "Drivmedel", [
+          ["Senaste", decimal(this._value("last_reported_consumption"), "L/100 km")],
+          ["Snitt", decimal(aggregate.latest_two_consumption, "L/100 km")]
+        ], [
+          ["Löpande snitt", decimal(aggregate.latest_two_consumption, "L/100 km"), `${aggregate.latest_two_consumption_count || 0} giltiga tankningar`],
+          ["Tankat denna månad", decimal(nowMonth?.litres, "L")],
+          ["Tankat i år", decimal(currentYearData?.litres, "L")]
+        ])}
+        ${this._overviewExpander("booked", "💳", "Bokförda utgifter", [
+          ["Månad", kroner(nowMonth?.total)],
+          ["År", kroner(currentYearData?.total)]
+        ], [
+          ["Bränsle · månad", kroner(nowMonth?.fuel)],
+          ["Övrigt · månad", kroner(nowMonth?.other)],
+          ["Bränsle · år", kroner(currentYearData?.fuel)],
+          ["Övrigt · år", kroner(currentYearData?.other)]
+        ])}
+        ${this._overviewExpander("drivecost", "📏", "Beräknad körkostnad/km", [
+          ["Månad", decimal(nowMonth?.estimated_total_per_km, "kr/km")],
+          ["År", decimal(currentYearData?.estimated_total_per_km, "kr/km")]
+        ], [
+          ["Denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth)],
+          ["Innevarande år", decimal(currentYearData?.estimated_total_per_km, "kr/km"), coverageText(currentYearData)],
+          ["Beräknat bränsle · månad", kroner(nowMonth?.estimated_fuel)],
+          ["Beräknat bränsle · år", kroner(currentYearData?.estimated_fuel)]
+        ])}
+      </div>`;
+      const annual = `<label class="select-label" for="fuelio-year">Visa år</label>
+      <select id="fuelio-year" ${allYears.length ? "" : "disabled"}>${allYears.map((row) => `<option value="${esc(String(row.year))}" ${String(row.year) === this._year ? "selected" : ""}>${esc(String(row.year))}</option>`).join("")}</select>
+      <div class="section-title annual-hero">Årsrapport · ${esc(this._year || "—")}</div>
+      <div class="annual-grid">
+        ${this._tile("🛣️", "Avläst körsträcka", decimal(annualYear?.km, "km"), odoNote(annualYear), "distance", this._year)}
+        ${this._tile("🚙", "Loggade resor", decimal(annualYear?.trip_count, "st"))}
+        ${this._tile("📏", "Genomsnitt/resa", decimal(annualYear?.average_trip_km, "km"))}
+        ${this._tile("🛢️", "Tankad volym", decimal(annualYear?.litres, "L"), "", "litres", this._year)}
+        ${this._tile("⛽", "Tankningar", decimal(annualYear?.fuel_ups, "st"))}
+        ${this._tile("📉", "Rapporterat snitt", decimal(annualYear?.average_reported_consumption, "L/100 km"), `${annualYear?.reported_consumption_samples ?? 0} giltiga mätningar`)}
+      </div>
+      <div class="annual-columns">
+        <div class="annual-block">
+          <div class="section-title">Kostnader · ${esc(this._year || "—")}</div>
+          <div class="grid">
+            ${this._tile("⛽", "Bränsle", kroner(annualYear?.fuel))}
+            ${this._tile("🧾", "Övriga utgifter", kroner(annualYear?.other))}
+            ${this._tile("💳", "Totalt", kroner(annualYear?.total), "", "costs", this._year)}
+            ${this._tile("📏", "Bokfört totalt/km", decimal(annualYear?.total_per_logged_km, "kr/km"), "Bokförda utgifter ÷ ODO-differens", "cost-per-km", this._year)}
+            ${this._tile("🔥", "Beräknat förbrukat bränsle", kroner(annualYear?.estimated_fuel), coverageText(annualYear))}
+            ${this._tile("📐", "Beräknad total/km", decimal(annualYear?.estimated_total_per_km, "kr/km"), coverageText(annualYear), "cost-per-km", this._year)}
+          </div>
+        </div>
+        <div class="annual-block">
+          <div class="section-title">Bränsle & effektivitet · ${esc(this._year || "—")}</div>
+          <div class="grid">
+            ${this._tile("💰", "Genomsnittligt literpris", decimal(annualYear?.average_fuel_price, "kr/L"), "Bränslekostnad ÷ tankade liter")}
+            ${this._tile("↘️", "Lägsta literpris", decimal(annualYear?.fuel_price_min, "kr/L"))}
+            ${this._tile("↗️", "Högsta literpris", decimal(annualYear?.fuel_price_max, "kr/L"))}
+            ${this._tile("↘️", "Lägsta förbrukning", decimal(annualYear?.consumption_min, "L/100 km"))}
+            ${this._tile("↗️", "Högsta förbrukning", decimal(annualYear?.consumption_max, "L/100 km"))}
+            ${this._tile("📊", "Förbrukningsunderlag", decimal(annualYear?.reported_consumption_samples, "st"), "Rapporterade positiva värden")}
+          </div>
+          ${categories(annualYear?.categories, `Utgifter per kategori · ${this._year || "—"}`, "categories", this._year)}
+        </div>
+      </div>
+      <div class="notice">Årsrapporten använder Fuelios importerade data för valt kalenderår. Första importerade året kan vara en delperiod; avläst körsträcka bygger på ODO-checkpoints. Rapporterat snitt är medelvärdet av årets giltiga positiva L/100 km-poster. Genomsnittligt literpris är faktiskt bokförd bränslekostnad delat med årets tankade liter.</div>`;
+
+      const tripLevelOptions = [["year","År"],["month","Månad"],["week","Vecka"],["day","Dag"]];
+      const tripLevelHtml = tripLevelOptions.map(([value,label]) => `<option value="${value}" ${value === this._tripLevel ? "selected" : ""}>${label}</option>`).join("");
+      const tripControls = `<label class="select-label" for="fuelio-trip-level">Nivå</label><select id="fuelio-trip-level">${tripLevelHtml}</select>`;
+      let tripDetail = "";
+      if (this._tripLevel === "year") {
+        tripDetail = this._tripSelect("Välj år", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSummary(this._tripRow("year", this._tripYear), `År ${this._tripYear || "—"}`);
+      } else if (this._tripLevel === "month") {
+        tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Månad", "fuelio-trip-month", tripMonths, this._tripMonth, monthName) + this._tripSummary(this._tripRow("month", this._tripMonth), this._tripMonth ? monthName(this._tripMonth) : "—");
+      } else if (this._tripLevel === "week") {
+        tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSummary(this._tripRow("week", this._tripWeek), this._tripWeek ? `Vecka ${String(this._tripWeek).slice(-2)} · ${String(this._tripWeek).slice(0,4)}` : "—");
+      } else {
+        const dayLabel = (value) => new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
+        tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSelect("Dag", "fuelio-trip-day", tripDays, this._tripDay, dayLabel) + this._tripSummary(this._tripRow("day", this._tripDay), this._tripDay ? dayLabel(this._tripDay) : "—");
+      }
+      const tripKey = this._tripLevel === "year" ? this._tripYear : this._tripLevel === "month" ? this._tripMonth : this._tripLevel === "week" ? this._tripWeek : this._tripDay;
+      const tripGraph = `<div class="trip-graph-box"><button type="button" class="trip-graph-toggle" data-trip-graph-toggle aria-expanded="${this._tripGraphOpen}"><span>📈 Graf</span><span aria-hidden="true">${this._tripGraphOpen ? "⌃" : "⌄"}</span></button>${this._tripGraphOpen ? `<div class="trip-graph-body">${this._tripInlineGraph(this._tripLevel, tripKey)}</div>` : ""}</div>`;
+      const tripLifetime = `<div class="tripbar"><span>🛣️ <strong>${esc(decimal(this._value("trip_count"), "resor"))}</strong> · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Sedan importstart</span></div>`;
+      const tripstats = `${tripLifetime}${tripControls}${tripDetail}${tripGraph}<div class="notice">TripDist och ODO är två separata mätningar. TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.</div>`;
+
+      const costs = `<div class="grid">
+        ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total), "", "costs", allMonths[0]?.month?.slice(0,4))}
+        ${this._tile("🗓️", `År ${currentYear}`, allMonths.length ? kroner(yearTotal) : "—")}
+      </div><label class="select-label" for="fuelio-month">Visa månad</label>
+      <select id="fuelio-month" ${allMonths.length ? "" : "disabled"}>${allMonths.map((row) => `<option value="${esc(row.month)}" ${row.month === this._month ? "selected" : ""}>${esc(monthName(row.month))}</option>`).join("")}</select>
+      <div class="section-title">${esc(selected ? monthName(selected.month) : "Ingen månadshistorik")}</div>
+      <div class="grid">
+        ${this._tile("⛽", "Bränsle", kroner(selected?.fuel))}
+        ${this._tile("🧾", "Övriga utgifter", kroner(selected?.other))}
+        ${this._tile("💳", "Totalt", kroner(selected?.total))}
+      </div><div class="section-title">Månadsstatistik · ${esc(selected ? monthName(selected.month) : "Ingen historik")}</div>
+      <div class="grid">
+        ${this._tile("🛣️", "Avläst körsträcka", decimal(selected?.km, "km"), selected?.odo_coverage === "partial_start" ? "Delperiod" : "ODO-differens")}
+        ${this._tile("🚙", "Loggade resor", decimal(selected?.trip_count, "st"))}
+        ${this._tile("📏", "Genomsnitt/resa", decimal(selected?.average_trip_km, "km"), "Loggade reskilometer ÷ antal resor")}
+      </div><div class="summary"><span><strong>Totalt sedan importstart</strong><br><span class="muted">Bränsle ${esc(kroner(this._value("fuel_cost")))} · Övrigt ${esc(kroner(this._value("other_expenses")))}</span></span><strong>${esc(kroner(this._value("total_actual_cost")))}</strong></div>
+      ${categories(selected?.categories, "Utgifter per kategori · vald månad")}
+      ${categories(selectedYear?.categories, `Utgifter per kategori · år ${currentYear}`)}
+      <div class="summary"><span>Uppskattad resekostnad · hela importen (inte faktisk utgift)</span><strong>${esc(kroner(this._value("estimated_trip_cost")))}</strong></div>
+      <div class="section-title">Beräknad körkostnad · förbrukat bränsle</div>
+      <div class="grid">
+        ${this._tile("⛽", "Bränsle · vald månad", kroner(selected?.estimated_fuel))}
+        ${this._tile("💳", "Totalt · vald månad", kroner(selected?.estimated_total))}
+        ${this._tile("⛽", `Bränsle · ${currentYear}`, kroner(selectedYear?.estimated_fuel))}
+        ${this._tile("💳", `Totalt · ${currentYear}`, kroner(selectedYear?.estimated_total))}
+        ${this._tile("⛽", "Bränsle · sedan start", kroner(lifetime.estimated_fuel))}
+        ${this._tile("💳", "Totalt · sedan start", kroner(lifetime.estimated_total))}
+      </div>
+      <div class="notice">Beräknad förbrukning med de två senaste giltiga tankningsvärdena tillgängliga vid varje ODO-intervalls början och då senast kända literpris. Ny tankning påverkar bara efterföljande körning. Om underlag saknas för en del av sträckan visas —. En giltig tankning ger begränsat underlag. Övriga utgifter räknas på betalningsdatum. Beräknat, inte bokfört bränsle.</div>
+      <div class="section-title">Bokförda utgifter per avläst ODO-kilometer</div>
+      <div class="grid">
+        ${this._tile("⛽", "Bränsle · månad", decimal(selected?.fuel_per_logged_km, "kr/km"), odoNote(selected))}
+        ${this._tile("💳", "Totalt · månad", decimal(selected?.total_per_logged_km, "kr/km"), odoNote(selected))}
+        ${this._tile("⛽", `Bränsle · ${currentYear}`, decimal(selectedYear?.fuel_per_logged_km, "kr/km"), odoNote(selectedYear))}
+        ${this._tile("💳", `Totalt · ${currentYear}`, decimal(selectedYear?.total_per_logged_km, "kr/km"), odoNote(selectedYear))}
+        ${this._tile("⛽", "Bränsle · sedan start", decimal(this._value("fuel_cost_per_km_all"), "kr/km"))}
+        ${this._tile("💳", "Totalt · sedan start", decimal(this._value("total_cost_per_km_all"), "kr/km"))}
+      </div>
+      <div class="notice">Bokförda utgifter ÷ ODO-differens, från senaste avläsning före periodstart till senaste inom perioden. Saknas tidigare avläsning räknas bara körning efter första avläsningen och perioden markeras som ofullständig. Saknas användbar differens visas —. Tankningar uppdaterar belopp och mätarställning vid nästa ZIP-inläsning.</div>
+      ${historyTruncated ? `<div class="notice">Månadsväljaren visar de senaste 120 månaderna. Livstidssumman inkluderar även äldre data.</div>` : ""}`;
+      const fuel = `<div class="grid">
+        ${this._tile("⛽", "Senaste förbrukning", decimal(this._value("last_reported_consumption"), "L/100 km"), "Rapporterat värde, inte livstidssnitt")}
+        ${this._tile("💰", "Senaste literpris", decimal(this._value("last_fuel_price"), "kr/L"))}
+        ${this._tile("🛢️", "Tankad volym", decimal(this._value("fuel_litres"), "L"), "Sedan importstart")}
+        ${this._tile("📆", "Senaste tankning", date(this._state("last_fillup_date")?.state))}
+      </div><div class="notice">Räckvidden räknas från senaste fulltankning som kalibreringspunkt. Senare deltankningar adderas och beräknad förbrukning dras av. Nästa tankdatum använder de senaste 30 dagarnas loggade körtempo och avser teoretiskt tom tank.</div><div class="section-title">Antal tankningar</div><div class="grid">
+        ${this._tile("📅", "Vald månad", decimal(selected?.fuel_ups, "st"))}
+        ${this._tile("🗓️", `År ${currentYear}`, decimal(selectedYear?.fuel_ups, "st"))}
+        ${this._tile("⛽", "Sedan importstart", decimal(this._value("fuel_count"), "st"))}
+      </div>`;
+      const records = `<div class="section-title">Literpris · kalenderåret</div><div class="records-grid">
+        ${this._recordTile("fuel_price_min_year", "Lägsta i år", "kr/L")}
+        ${this._recordTile("fuel_price_max_year", "Högsta i år", "kr/L")}
+      </div><div class="section-title">Literpris · sedan importstart</div><div class="records-grid">
+        ${this._recordTile("fuel_price_min_all", "Lägsta totalt", "kr/L")}
+        ${this._recordTile("fuel_price_max_all", "Högsta totalt", "kr/L")}
+      </div><div class="section-title">Rapporterad förbrukning · kalenderåret</div><div class="records-grid">
+        ${this._recordTile("consumption_min_year", "Lägsta i år", "L/100 km")}
+        ${this._recordTile("consumption_max_year", "Högsta i år", "L/100 km")}
+      </div><div class="section-title">Rapporterad förbrukning · sedan importstart</div><div class="records-grid">
+        ${this._recordTile("consumption_min_all", "Lägsta totalt", "L/100 km")}
+        ${this._recordTile("consumption_max_all", "Högsta totalt", "L/100 km")}
+      </div><div class="notice">Rekorden bygger på registrerade tankningar med giltiga positiva värden. Datumet visas under varje rekord. Saknade värden visas som —. Ett rekord per tankning är inte samma sak som ett vägt livstidssnitt.</div>`;
+      const serviceMonth = this._maintenanceTotal(selected?.categories);
+      const serviceYear = this._maintenanceTotal(annualYear?.categories);
+      const serviceAll = this._maintenanceTotal(aggregate.categories_all);
+      const service = `<div class="grid">
+        ${this._tile("🧰", `Underhåll · ${selected ? monthName(selected.month) : "vald månad"}`, kroner(serviceMonth), "Fuelio-kategorier: Underhåll / Service / Reparation")}
+        ${this._tile("🗓️", `Underhåll · år ${this._year || "—"}`, kroner(serviceYear), "Valt år i Årsöversikten")}
+        ${this._tile("🔧", "Underhåll · sedan importstart", kroner(serviceAll), "Summerat från Fuelios kategorier")}
+      </div><div class="notice">Beloppen hämtas från Fuelios bokförda kostnadskategorier med namn som innehåller Underhåll, Service eller Reparation. Serviceintervall och framtida underhållspåminnelser finns ännu inte i datamodellen.</div>`;
+      const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste ZIP-uppdatering</span><strong>${esc(syncText)}</strong></div><div class="summary"><span>Resurs</span><strong>/fuelio/ha-fuelio-card.js</strong></div><div class="notice">ZIP-tiden är filens modifieringstid. I din rclone-kedja bevaras Drive-filens tid när ZIP:en kopieras till Home Assistant.</div>`;
+      this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">
+        <div class="header">
+          <div class="title-wrap"><h2>🚙 ${esc(title)}</h2><span class="muted">Desktop dashboard · Fuelio read-only</span></div>
+          <div class="header-meta">
+            <span class="pill pill-status">${isAvailable ? "✅ Data tillgänglig" : "⚠️ Data saknas"}</span>
+            <span class="pill pill-sync">🗜️ ZIP uppdaterad <strong>${esc(syncText)}</strong></span>
+            <span class="pill pill-trip">🚗 Senaste resa <strong>${esc(date(this._state("last_trip_date")?.state))}</strong></span>
+          </div>
+        </div>
+        ${kpis}
+        ${overview}
+        <div class="dashboard-grid">
+          ${this._section("annual", "📊", "Årsöversikt", annual)}
+          ${this._section("tripstats", "🚙", "Resestatistik", tripstats)}
+          ${this._section("costs", "💳", "Kostnader", costs)}
+          ${this._section("fuel", "⛽", "Bränsle", fuel)}
+          ${this._section("records", "🏆", "Pris- & förbrukningsrekord", records)}
+          ${this._section("service", "🔧", "Service & underhåll", service)}
+          ${this._section("version", "ℹ️", "Versionsinformation", version)}
+        </div>
+        <div class="foot muted">Fuelio · read-only · ${CARD_VERSION}</div>
+      </div></ha-card>${this._chartModal()}${this._rangeCalibrationModal(forecast)}`;
+    }
+  }
+
+  if (!customElements.get("ha-fuelio-card")) customElements.define("ha-fuelio-card", HaFuelioCard);
+  window.customCards = window.customCards || [];
+  if (!window.customCards.some((card) => card.type === "ha-fuelio-card")) {
+    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard med årsöversikt, interaktiva grafer, kostnader, tankningar och historiska rekord." });
+  }
+})();

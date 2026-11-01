@@ -1,0 +1,28 @@
+name: Fuelio parser and frontend tests
+on:
+  push:
+    branches: [dev, beta, main]
+  pull_request:
+    branches: [beta, main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m compileall -q custom_components tests
+      - run: python -m unittest discover -s tests -v
+      - name: Check JavaScript syntax
+        run: node --check custom_components/fuelio/www/ha-fuelio-card.js
+      - name: Frontend smoke tests
+        run: node tests/test_frontend.mjs
+      - name: Real entity ID and mixed-prefix regression
+        run: node tests/test_frontend_real_ids.mjs
+      - name: Categorized cost, period ratios and fill-up frontend regression
+        run: node tests/test_cost_frontend.mjs
+      - name: Four-panel overview and historical selector regression
+        run: node tests/test_estimate_frontend.mjs
+      - name: Mobile frontend regression
+        run: node tests/test_mobile_frontend.mjs

@@ -1,0 +1,34 @@
+calibrate_range:
+  name: Kalibrera räckvidd
+  description: Justera den aktuella tankens teoretiska räckvidd mot bilens färddator utan att skriva till Fuelio.
+  fields:
+    entity_id:
+      name: Fuelio-entitet
+      description: En entitet från den Fuelio-konfiguration som ska kalibreras.
+      required: true
+      selector:
+        entity:
+          integration: fuelio
+    range_km:
+      name: Räckvidd
+      description: Aktuell återstående räckvidd enligt bilens färddator.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5000
+          step: 1
+          unit_of_measurement: km
+          mode: box
+
+clear_range_calibration:
+  name: Återställ räckviddskalibrering
+  description: Ta bort den manuella kalibreringen och återgå till Fuelios automatiska förbrukningsunderlag.
+  fields:
+    entity_id:
+      name: Fuelio-entitet
+      description: En entitet från den Fuelio-konfiguration vars kalibrering ska tas bort.
+      required: true
+      selector:
+        entity:
+          integration: fuelio
