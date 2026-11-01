@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b2 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b3 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b2";
+  const CARD_VERSION = "2026.11.0b3";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
