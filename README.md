@@ -1,10 +1,12 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest development candidate: `2026.11.1b1` on `dev`; stable remains `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
 
-## Features and data contract (2026.11.0)
+## Features and data contract (2026.11.1b1)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
+- **Bilingual integration UI (English/Swedish):** config flow, options, sensor friendly names, services and both bundled dashboard cards follow the Home Assistant/browser language. Backend aggregate data stays language-neutral where practical.
+- **Optional calendar platform:** the read-only Fuelio calendar is enabled by default for backward compatibility, but can be disabled under the integration's **Configure** options. Changing the option reloads the config entry; sensor entities remain available.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
 - The `Monthly cost breakdown` sensor exposes bounded aggregate attributes: `months` (up to 120), `years` (up to 40), `categories_all`, `lifetime_odometer_km`, `estimated_lifetime`, `latest_two_consumption`, `latest_two_consumption_count` and coverage metadata. Period rows include booked fuel/non-fuel costs, purchased litres, observed ODO distance, logged trip km, trip count, mean logged trip length, fill-up count, categories and separately labelled booked/estimated cost metrics. Year rows additionally include average reported consumption/sample count, weighted actual average fuel price and yearly min/max price/consumption values. All-month history may be truncated for HA attribute size; lifetime aggregates are separate.
 - Fuelio can export a realized recurring cost on an impossible month-end date (for example `2026-09-31`). The parser clamps only cost-row day 29-31 overflow to the real last day of that month; other date parsing remains strict.
@@ -33,6 +35,10 @@ Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel
 **Tank/range forecast:** the latest primary-tank full fill-up is the calibration point. Later partial fills add recorded litres; estimated driving consumption prefers the recent measured full→full basis when available, otherwise it uses the latest up-to-two positive Fuelio-reported L/100 km values. Remaining litres are bounded to tank capacity, remaining range is theoretical, and next-fuel-up date/days use up to 30 calendar days of logged driving pace. The dashboard can apply an HA-local **current-tank range calibration** from the vehicle computer: entered remaining km are converted to a temporary consumption basis, persisted across HA reloads, and automatically cleared only when the latest actual primary-tank fill-up changes. Historical/backfilled tank records do not clear it. This override never writes to Fuelio or the ZIP. The sync timestamp is the local ZIP mtime; in the tested rclone workflow it matches Drive's preserved modification time.
 
 For detailed fields see [analytics schema](docs/analytics-schema.md), [calendar model](docs/calendar.md), [ODO algorithm](ODOMETER_ALGORITHM.md) and [beta.8 test status](BETA8_VALIDATION.md).
+
+### Integration options
+
+Open **Settings → Devices & services → Fuelio → Configure** to enable or disable the optional Fuelio calendar. Existing installations default to **enabled**, preserving the `2026.11.0` behavior. Disabling the calendar removes only the calendar platform after reload; sensor and dashboard data remain unchanged.
 
 ## Install or upgrade
 
