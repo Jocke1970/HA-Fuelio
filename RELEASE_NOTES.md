@@ -237,7 +237,7 @@ Service & maintenance cost visibility fix.
   - the month selected in **Kostnader**
   - the year selected in **Annual overview**
   - the full imported period
-- Match Fuelio category names containing the Fuelio category names `Underhåll`, `Service` or `Reparation`; unrelated categories such as the source category `Tjänster` are not included.
+- Match Fuelio category names containing `Underhåll`, `Service` or `Reparation`; unrelated categories such as the source category `Tjänster` are not included.
 - Existing booked cost totals are unchanged; this release fixes presentation/visibility only.
 - No new sensors or unique-ID/entity-ID changes. Sensor count remains **42**.
 - Frontend version becomes **2026.10.0b14**.
