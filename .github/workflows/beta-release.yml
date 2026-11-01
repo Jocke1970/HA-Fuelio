@@ -19,6 +19,10 @@ jobs:
         run: python -m compileall -q custom_components tests
       - name: Run parser and HACS metadata regression tests
         run: python -m unittest discover -s tests -v
+      - name: Check mobile frontend syntax
+        run: node --check custom_components/fuelio/www/ha-fuelio-mobile-card.js
+      - name: Run mobile frontend regression
+        run: node tests/test_mobile_frontend.mjs
       - name: Check beta version, HACS metadata and matching release notes
         id: version
         shell: bash
