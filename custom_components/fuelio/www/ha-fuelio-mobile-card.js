@@ -1,9 +1,9 @@
-/* HA-Fuelio Mobile Card 2026.11.0 — compact Fuelio overview for phones. */
+/* HA-Fuelio Mobile Card 2026.11.1b1 — compact Fuelio overview for phones. */
 (() => {
   "use strict";
   const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
 
-  const CARD_VERSION = "2026.11.0";
+  const CARD_VERSION = "2026.11.1b1";
   const RESERVE_RANGE_KM = 75;
   const fmt = new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat(UI_LANGUAGE, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
