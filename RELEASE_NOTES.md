@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.0b5 🚙📊
+
+Hierarchical trip statistics plus calendar polish.
+
+- Add a bounded **Resestatistik** drill-down in the desktop card with levels **År → Månad → Vecka → Dag**.
+- Only the selected statistics level is expanded; selectors are scoped to the chosen year/week.
+- Show the same core metrics at every level: Fuelio `TripDist`, ODO-checkpoint distance, trip count, total travel time and average distance per trip.
+- Keep `TripDist` and ODO as deliberately separate measurements; do not force them to match.
+- Compute all trip statistics from the current Fuelio ZIP on each coordinator refresh. No HA-Fuelio history database, cache file or write-back path is introduced.
+- Bound statistics to 40 years, 120 months, 160 ISO weeks and 400 trip days in Home Assistant attributes.
+- Remove `TripCategory` from trip calendar projection/presentation; sanitized trip title and note remain available.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b5`.
+- Release flow remains `dev → beta → main`; real Home Assistant validation is required before stable promotion.
+
 # HA-Fuelio 2026.11.0b4 🚗📅
 
 Richer read-only Fuelio calendar with journey timeline.
