@@ -1,3 +1,19 @@
+# HA-Fuelio 2026.11.0b4 🚗📅
+
+Richer read-only Fuelio calendar with journey timeline.
+
+- Extend the existing Fuelio calendar with the latest **256 TripLog journeys** as timed Home Assistant events.
+- Use Fuelio `StartDate`/`EndDate` for event time and `TripDist` for the displayed journey distance; do not derive trip distance from odometer differences.
+- Treat `EndOdo` only as an odometer checkpoint. A zero/blank `StartOdo` is valid and is not treated as broken data.
+- Show sanitized TripLog title/category/note when present, plus trip duration and ending odometer.
+- Keep GPS coordinates, route geometry, start/end place names, internal IDs, vehicle identifiers and raw TripLog rows out of the calendar projection.
+- Enrich current/future cost events with sanitized Fuelio cost title and `Notes` when available, while retaining category, amount and maintenance/expense classification.
+- Keep separate bounds of **256 trip events + 256 cost events** to avoid unbounded HA state/memory growth.
+- Keep templates, incomes and moving estimated-refuel forecasts excluded.
+- Preserve the existing calendar entity and all 42 sensor unique IDs/entity IDs; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b4`.
+- Release flow remains `dev → beta → main`; real Home Assistant validation is required before any stable promotion.
+
 # HA-Fuelio 2026.11.0b3 📅🚙
 
 Read-only Fuelio calendar.
