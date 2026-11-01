@@ -194,8 +194,8 @@ class FuelioParserTests(unittest.TestCase):
 
     def test_measured_full_to_full_becomes_automatic_range_basis(self):
         csv = forecast_csv().replace(
-            '"2026-08-01 11:00","900","40","1"',
-            '"2026-08-01 11:00","200","40","1"',
+            "2026-08-01 11:00,900,40,1",
+            "2026-08-01 11:00,200,40,1",
         )
         snapshot = parse_backup(csv, today=date(2026, 9, 21))
         economy = snapshot.fuel_forecast["economy"]
