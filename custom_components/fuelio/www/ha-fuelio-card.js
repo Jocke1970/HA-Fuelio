@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b5 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b6 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b5";
+  const CARD_VERSION = "2026.11.0b6";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -252,9 +252,15 @@ const ENTITY_SLUGS = Object.freeze({
         }
         const chartTarget = event.target.closest?.("[data-chart]");
         if (chartTarget?.dataset?.chart) {
+          const chartId = chartTarget.dataset.chart;
+          const tripKey = this._tripLevel === "year" ? this._tripYear :
+            this._tripLevel === "month" ? this._tripMonth :
+            this._tripLevel === "week" ? this._tripWeek : this._tripDay;
           this._chart = {
-            id: chartTarget.dataset.chart,
+            id: chartId,
             year: chartTarget.dataset.chartYear || this._year || String(new Date().getFullYear()),
+            tripLevel: chartId.startsWith("trip-") ? this._tripLevel : null,
+            tripKey: chartId.startsWith("trip-") ? tripKey : null,
           };
           this._render();
           return;
@@ -454,12 +460,13 @@ const ENTITY_SLUGS = Object.freeze({
       if (!row) return `<div class="notice">Ingen resestatistik för vald period.</div>`;
       const odoDetail = row.odo_coverage === "partial_start" ? "Delperiod" :
         row.odo_start_on && row.odo_end_on ? `${row.odo_start_on} → ${row.odo_end_on}` : "ODO-underlag saknas";
+      const charts = this._tripLevel === "day" ? null : true;
       return `<div class="section-title">${esc(label)}</div><div class="grid">
-        ${this._tile("🧭", "TripDist", decimal(row.trip_km, "km"), "Fuelio TripDist")}
-        ${this._tile("🛣️", "ODO-sträcka", decimal(row.odo_km, "km"), odoDetail)}
-        ${this._tile("🚙", "Antal resor", decimal(row.trip_count, "st"))}
-        ${this._tile("⏱️", "Körtid", decimal(row.duration_hours, "h"))}
-        ${this._tile("📏", "Snitt/resa", decimal(row.average_trip_km, "km"))}
+        ${this._tile("🧭", "TripDist", decimal(row.trip_km, "km"), "Fuelio TripDist", charts ? "trip-distance" : null)}
+        ${this._tile("🛣️", "ODO-sträcka", decimal(row.odo_km, "km"), odoDetail, charts ? "trip-distance" : null)}
+        ${this._tile("🚙", "Antal resor", decimal(row.trip_count, "st"), "", charts ? "trip-count" : null)}
+        ${this._tile("⏱️", "Körtid", decimal(row.duration_hours, "h"), "", charts ? "trip-duration" : null)}
+        ${this._tile("📏", "Snitt/resa", decimal(row.average_trip_km, "km"), "", charts ? "trip-average" : null)}
       </div>`;
     }
     _maintenanceTotal(categories) {
@@ -568,6 +575,90 @@ const ENTITY_SLUGS = Object.freeze({
       const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
       return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${shapes}${labels}</svg></div>`;
     }
+    _tripChartRows(level, key) {
+      const stats = this._tripStats();
+      if (level === "year") {
+        return (stats.months || []).filter((row) => String(row.month).startsWith(`${key}-`)).sort((a,b) => String(a.month).localeCompare(String(b.month)));
+      }
+      if (level === "month") {
+        const start = `${key}-01`;
+        const [year, month] = String(key).split("-").map(Number);
+        const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0,10);
+        return (stats.weeks || []).filter((row) => String(row.end) >= start && String(row.start) <= end).sort((a,b) => String(a.week).localeCompare(String(b.week)));
+      }
+      if (level === "week") {
+        const week = (stats.weeks || []).find((row) => String(row.week) === String(key));
+        if (!week) return [];
+        return (stats.days || []).filter((row) => String(row.date) >= String(week.start) && String(row.date) <= String(week.end)).sort((a,b) => String(a.date).localeCompare(String(b.date)));
+      }
+      return [];
+    }
+    _tripChartLabel(row, level) {
+      if (level === "year") return this._monthLabel(row.month);
+      if (level === "month") return `v${String(row.week || "").slice(-2)}`;
+      if (level === "week") {
+        const parsed = new Date(`${row.date}T12:00:00Z`);
+        return new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"numeric", timeZone:"UTC" }).format(parsed).replace(".", "");
+      }
+      return "";
+    }
+    _tripLineChart(rows, level, series, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen underliggande resedata för vald period.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const values = rows.flatMap((row) => series.map((item) => this._chartNumber(row[item.key])).filter((value) => value !== null));
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = rows.length > 1 ? plotWidth / (rows.length - 1) : plotWidth;
+      let shapes = "";
+      series.forEach((item, seriesIndex) => {
+        let segment = [];
+        const flush = () => {
+          if (segment.length > 1) shapes += `<polyline class="${seriesIndex === 0 ? "series-a-line" : "series-b-line"}" points="${segment.join(" ")}"></polyline>`;
+          segment = [];
+        };
+        rows.forEach((row, rowIndex) => {
+          const value = this._chartNumber(row[item.key]);
+          if (value === null || value < 0) { flush(); return; }
+          const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+          const y = top + plotHeight - value / maxValue * plotHeight;
+          const label = this._tripChartLabel(row, level);
+          segment.push(`${x},${y}`);
+          shapes += `<circle class="${seriesIndex === 0 ? "series-a-dot" : "series-b-dot"}" cx="${x}" cy="${y}" r="5"><title>${esc(label)} · ${esc(item.label)}: ${esc(decimal(value, unit))}</title></circle>`;
+        });
+        flush();
+      });
+      const labels = rows.map((row,rowIndex) => {
+        const x = left + (rows.length > 1 ? rowIndex * step : plotWidth / 2);
+        return `<text x="${x}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(this._tripChartLabel(row, level))}</text>`;
+      }).join("");
+      const legend = `<div class="chart-legend">${series.map((item) => `<span>${esc(item.label)}</span>`).join("")}</div>`;
+      return `${legend}<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${shapes}${labels}</svg></div>`;
+    }
+    _tripBarChart(rows, level, key, label, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen underliggande resedata för vald period.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const values = rows.map((row) => this._chartNumber(row[key]) ?? 0);
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = plotWidth / rows.length;
+      const barWidth = Math.min(step * .62, 62);
+      const bars = rows.map((row,index) => {
+        const value = this._chartNumber(row[key]);
+        const x = left + index * step + (step - barWidth) / 2;
+        const h = value === null ? 0 : value / maxValue * plotHeight;
+        const y = top + plotHeight - h;
+        const xLabel = this._tripChartLabel(row, level);
+        return `<rect class="series-a-fill" x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4"><title>${esc(xLabel)} · ${esc(label)}: ${esc(decimal(value, unit))}</title></rect><text x="${left + index * step + step / 2}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(xLabel)}</text>`;
+      }).join("");
+      return `<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}</svg></div>`;
+    }
+    _tripChartPeriodLabel(level, key) {
+      if (level === "year") return `År ${key}`;
+      if (level === "month") return monthName(String(key));
+      if (level === "week") return `Vecka ${String(key).slice(-2)} · ${String(key).slice(0,4)}`;
+      return String(key || "");
+    }
+
     _categoryChart(rows) {
       const values = Array.isArray(rows) ? rows.filter((row) => row && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0) : [];
       if (!values.length) return `<div class="chart-empty">Inga kategoriserade utgifter för valt år.</div>`;
@@ -589,7 +680,30 @@ const ENTITY_SLUGS = Object.freeze({
       const months = this._monthsForYear(year);
       const annual = this._years().find((row) => String(row.year) === year);
       let title = "Graf", content = "", note = "";
-      if (this._chart.id === "costs") {
+      if (this._chart.id.startsWith("trip-")) {
+        const level = this._chart.tripLevel;
+        const key = this._chart.tripKey;
+        const rows = this._tripChartRows(level, key);
+        const period = this._tripChartPeriodLabel(level, key);
+        const sublevel = level === "year" ? "månad" : level === "month" ? "vecka" : "dag";
+        if (this._chart.id === "trip-distance") {
+          title = "🧭 TripDist vs ODO-sträcka";
+          content = this._tripLineChart(rows, level, [{key:"trip_km",label:"TripDist"},{key:"odo_km",label:"ODO-sträcka"}], "km");
+          note = `${period} uppdelat per ${sublevel}. TripDist är Fuelios loggade/GPS-baserade körsträcka; ODO kommer från mätarställnings-checkpoints.`;
+        } else if (this._chart.id === "trip-count") {
+          title = "🚙 Antal resor";
+          content = this._tripBarChart(rows, level, "trip_count", "Antal resor", "st");
+          note = `${period} uppdelat per ${sublevel}.`;
+        } else if (this._chart.id === "trip-duration") {
+          title = "⏱️ Körtid";
+          content = this._tripLineChart(rows, level, [{key:"duration_hours",label:"Körtid"}], "h");
+          note = `${period} uppdelat per ${sublevel}.`;
+        } else if (this._chart.id === "trip-average") {
+          title = "📏 Snitt per resa";
+          content = this._tripLineChart(rows, level, [{key:"average_trip_km",label:"Snitt/resa"}], "km");
+          note = `${period} uppdelat per ${sublevel}. Snittet är TripDist ÷ antal loggade resor.`;
+        }
+      } else if (this._chart.id === "costs") {
         title = "💳 Kostnader per månad";
         content = this._barChart(months, [{key:"fuel",label:"Bränsle"},{key:"other",label:"Övrigt"}], "kr", true);
         note = "Staplarna visar bokförda kostnader på betalnings-/tankningsdatum. Bränsle och övriga utgifter är staplade.";
@@ -612,7 +726,8 @@ const ENTITY_SLUGS = Object.freeze({
       } else {
         content = `<div class="chart-empty">Grafen är inte tillgänglig ännu.</div>`;
       }
-      return `<div class="chart-backdrop"><section class="chart-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="chart-head"><div><h3>${esc(title)}</h3><div class="muted">År ${esc(year)}</div></div><button type="button" class="chart-close" data-chart-close aria-label="Stäng graf">✕</button></div><div class="chart-body">${content}</div>${note ? `<div class="chart-note">${esc(note)}</div>` : ""}</section></div>`;
+      const chartContext = this._chart.id.startsWith("trip-") ? this._tripChartPeriodLabel(this._chart.tripLevel, this._chart.tripKey) : `År ${year}`;
+      return `<div class="chart-backdrop"><section class="chart-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="chart-head"><div><h3>${esc(title)}</h3><div class="muted">${esc(chartContext)}</div></div><button type="button" class="chart-close" data-chart-close aria-label="Stäng graf">✕</button></div><div class="chart-body">${content}</div>${note ? `<div class="chart-note">${esc(note)}</div>` : ""}</section></div>`;
     }
     _panel(icon, title, rows) {
       return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
