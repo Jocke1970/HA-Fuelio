@@ -265,14 +265,76 @@ class FuelioParserTests(unittest.TestCase):
         self.assertEqual(
             snapshot.upcoming_calendar_events,
             (
-                {"date": "2026-11-01", "category": "Service", "amount": 1200.0, "kind": "maintenance"},
-                {"date": "2026-11-05", "category": "Försäkring", "amount": 2400.0, "kind": "expense"},
+                {
+                    "date": "2026-11-01",
+                    "category": "Service",
+                    "amount": 1200.0,
+                    "kind": "maintenance",
+                    "title": "SECRET TITLE",
+                    "note": "PRIVATE NOTE",
+                },
+                {
+                    "date": "2026-11-05",
+                    "category": "Försäkring",
+                    "amount": 2400.0,
+                    "kind": "expense",
+                    "title": "ANOTHER SECRET",
+                    "note": "PRIVATE NOTE 2",
+                },
             ),
         )
         projected = repr(snapshot.upcoming_calendar_events)
-        self.assertNotIn("SECRET TITLE", projected)
-        self.assertNotIn("PRIVATE NOTE", projected)
+        self.assertIn("SECRET TITLE", projected)
+        self.assertIn("PRIVATE NOTE", projected)
         self.assertNotIn("PRIVATE-REG", repr(snapshot))
+
+    def test_trip_calendar_projection_uses_tripdist_and_end_odo_without_gps(self):
+        out = StringIO()
+        writer = csv.writer(out)
+
+        def section(name, header, *records):
+            writer.writerow([f"## {name}"])
+            writer.writerow(header)
+            writer.writerows(records)
+
+        section(
+            "Vehicle",
+            ["Name", "DistUnit", "FuelUnit", "Tank1Capacity"],
+            ["PRIVATE-REG", "0", "0", "60"],
+        )
+        section(
+            "Log",
+            ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)",
+             "VolumePrice", "l/100km (optional)", "TankNumber"],
+        )
+        section("Costs", ["Date", "Cost", "isTemplate", "isIncome"])
+        section(
+            "TripLog",
+            ["title", "StartDate", "EndDate", "TripDist", "TripDuration", "TripCost",
+             "StartOdo", "EndOdo", "TripCategory", "TripNote", "StartLat", "StartLon",
+             "EndLat", "EndLon", "StartName", "EndName"],
+            ["Jobbet", "2026-11-01 07:42:00", "2026-11-01 08:06:00",
+             "18123", "1440", "0", "0", "180277", "Arbete", "Kundbesök",
+             "59.123", "18.456", "59.789", "18.999", "PRIVATE START", "PRIVATE END"],
+        )
+
+        snapshot = parse_backup(out.getvalue(), today=date(2026, 11, 1))
+        self.assertEqual(len(snapshot.upcoming_calendar_events), 1)
+        event = snapshot.upcoming_calendar_events[0]
+        self.assertEqual(event["kind"], "trip")
+        self.assertEqual(event["title"], "Jobbet")
+        self.assertEqual(event["category"], "Arbete")
+        self.assertEqual(event["start"], "2026-11-01T07:42:00")
+        self.assertEqual(event["end"], "2026-11-01T08:06:00")
+        self.assertAlmostEqual(event["distance_km"], 18.123, places=3)
+        self.assertEqual(event["duration_minutes"], 24.0)
+        self.assertEqual(event["end_odometer_km"], 180277.0)
+        self.assertEqual(event["note"], "Kundbesök")
+        projected = repr(event)
+        self.assertNotIn("59.123", projected)
+        self.assertNotIn("PRIVATE START", projected)
+        self.assertNotIn("PRIVATE END", projected)
+        self.assertNotIn("StartOdo", projected)
 
     def test_cost_month_end_overflow_is_clamped_but_trip_dates_stay_strict(self):
         overflow = sample_csv().replace("2026-09-25 12:00", "2026-09-31 05:00", 1)
