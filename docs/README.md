@@ -1,11 +1,11 @@
 # HA-Fuelio developer documentation
 
-**Current source/release baseline: `v0.1.0-beta.8` (test prerelease, not stable).** Read the [root README](../README.md) first for current installation, available features and limitations.
+**Current development candidate: `2026.11.0b1` on `dev`; latest previously validated/published line remains prerelease-only.** Read the [root README](../README.md) first for current installation, available features and limitations.
 
 ## Current documentation
 
 - [Beta.8 real HA validation and open findings](../BETA8_VALIDATION.md) — tested functionality, recurring paid parking/template ambiguity, ODO-versus-trip discrepancy, remaining checks and release gate.
-- [Current analytics schema and cost semantics](analytics-schema.md) — categories, observed odometer distances, booked SEK/km, time-aware estimated driving costs, bounded attributes.
+- [Current analytics schema and cost semantics](analytics-schema.md) — measured full→full fuel economy, range-basis precedence, categories, observed odometer distances, booked SEK/km, time-aware estimated driving costs and bounded attributes.
 - [ODO checkpoint algorithm](../ODOMETER_ALGORITHM.md) — beta.7 baseline retained in beta.8.
 - [Beta.8 design specification](../NEXT_ITERATION_DESIGN.md) — implemented design and known precision limits; no longer a future feature request.
 - [Release notes](../RELEASE_NOTES.md) — historical beta changes; current release at the top.
