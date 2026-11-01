@@ -17,7 +17,8 @@ MAX_ZIP_BYTES = 32 * 1024 * 1024
 MAX_CSV_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 100_000
 MAX_MONTHS_IN_ATTRIBUTES = 120  # Bound recorder/state attribute size; newest ten years.
-MAX_UPCOMING_CALENDAR_EVENTS = 256  # Bound in-memory read-only calendar data.
+MAX_CALENDAR_COST_EVENTS = 256  # Bound local read-only cost-calendar data.
+MAX_CALENDAR_TRIP_EVENTS = 256  # Bound local read-only trip-calendar data.
 
 try:
     from .fuel_economy import FuelEconomyEvent, compute_fuel_economy
@@ -40,7 +41,7 @@ except ImportError:  # Pure parser tests load this file outside the HA package.
 
 @dataclass(frozen=True, slots=True)
 class FuelioSnapshot:
-    """Aggregate values only: no plate, VIN, notes, trip details or GPS."""
+    """Sanitized local snapshot: no plate, VIN, GPS coordinates, routes or raw rows."""
     vehicle_name: str
     trip_count: int
     trip_distance_km: float
@@ -193,13 +194,17 @@ def _nonnegative(raw: str, *, default: Decimal | None = None) -> Decimal | None:
     return value
 
 
-def _date(raw: str) -> date:
+def _datetime(raw: str) -> datetime:
     for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
         try:
-            return datetime.strptime(raw.strip(), pattern).date()
+            return datetime.strptime(raw.strip(), pattern)
         except ValueError:
             pass
     raise ValueError("Invalid date in Fuelio backup")
+
+
+def _date(raw: str) -> date:
+    return _datetime(raw).date()
 
 def _cost_date(raw: str) -> date:
     """Parse a Fuelio cost date, tolerating its month-end recurrence bug only."""
@@ -297,8 +302,10 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     trip_count_by_month: dict[str, int] = {}
     logged_km_total = Decimal(0)
     logged_km_by_day: dict[date, Decimal] = {}
+    trip_calendar_events: list[dict] = []
     for trip in sections["TripLog"]:
-        day = _date(trip["EndDate"])
+        end_dt = _datetime(trip["EndDate"])
+        day = end_dt.date()
         distance = _nonnegative(trip["TripDist"], default=Decimal(0))
         duration = _nonnegative(trip["TripDuration"], default=Decimal(0))
         estimate = _nonnegative(trip["TripCost"], default=Decimal(0))
@@ -318,12 +325,36 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             month_trip_m += distance
         if day <= today and (last_trip is None or day > last_trip):
             last_trip = day
-        # Use the actual StartDate when present, otherwise the trip's EndDate.
-        # Start/EndOdo may straddle a calendar boundary, unlike TripDist.
-        start_day = _date(trip["StartDate"]) if trip.get("StartDate", "").strip() else day
+        # StartOdo may legitimately be 0/blank when Fuelio derives the trip start
+        # from the previous EndOdo. TripDist remains the trip-distance source;
+        # EndOdo is kept as an odometer checkpoint, never as a GPS substitute.
+        start_raw = trip.get("StartDate", "").strip()
+        start_dt = _datetime(start_raw) if start_raw else end_dt - timedelta(seconds=float(duration))
+        start_day = start_dt.date()
+        start_odo = _nonnegative(trip.get("StartOdo", ""))
+        end_odo = _nonnegative(trip.get("EndOdo", ""))
         if start_day <= day and day <= today:
-            observe_odometer(start_day, _nonnegative(trip.get("StartOdo", "")))
-            observe_odometer(day, _nonnegative(trip.get("EndOdo", "")))
+            observe_odometer(start_day, start_odo)
+            observe_odometer(day, end_odo)
+
+        # Keep only a bounded, sanitized local calendar projection. User-entered
+        # title/note/category are useful in the local HA calendar, but GPS names,
+        # coordinates, route geometry, internal IDs and raw TripLog rows are not.
+        if day <= today and start_dt <= end_dt:
+            trip_title = " ".join((trip.get("title") or trip.get("Title") or "").split())[:96] or "Resa"
+            trip_note = " ".join((trip.get("TripNote") or "").split())[:240] or None
+            trip_category = " ".join((trip.get("TripCategory") or "").split())[:64] or None
+            trip_calendar_events.append({
+                "kind": "trip",
+                "start": start_dt.isoformat(timespec="seconds"),
+                "end": end_dt.isoformat(timespec="seconds"),
+                "title": trip_title,
+                "category": trip_category,
+                "distance_km": round(float(distance / 1000), 3),
+                "duration_minutes": round(float(duration / 60), 1),
+                "end_odometer_km": round(float(end_odo), 1) if end_odo is not None and end_odo > 0 else None,
+                "note": trip_note,
+            })
 
     # Monthly values are aggregate-only and capped before exposing as HA attributes.
     monthly: dict[str, dict[str, Decimal]] = {}
@@ -387,8 +418,9 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             last_fillup = day
             last_price = price if price is not None and price > 0 else (cost / volume if volume else None)
 
-    # CostCategories maps private internal IDs to display labels. Never expose IDs,
-    # individual expense titles, notes or other source records as HA attributes.
+    # CostCategories maps private internal IDs to display labels. IDs and raw
+    # source rows remain private; sanitized user-facing title/note text may be
+    # projected into the local read-only HA calendar.
     category_names: dict[str, str] = {}
     for category in sections.get("CostCategories", []):
         identifier = category.get("CostTypeID", "").strip()
@@ -413,18 +445,24 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         label = category_names.get(record.get("CostTypeID", "").strip(), "Okategoriserat")
         expense_count += 1
 
-        # Keep only a bounded, privacy-safe calendar projection. Fuelio cost
-        # titles, notes and internal IDs never leave the parser.
+        # Keep a bounded local calendar projection. Title and note are sanitized
+        # user-facing text; internal IDs, vehicle identifiers and raw rows stay out.
         if day >= today:
             normalized = label.casefold()
             kind = "maintenance" if any(
                 token in normalized for token in ("underhåll", "service", "reparation")
             ) else "expense"
+            cost_title = " ".join(
+                (record.get("CostTitle") or record.get("Title") or "").split()
+            )[:96] or None
+            cost_note = " ".join((record.get("Notes") or "").split())[:240] or None
             calendar_events.append({
                 "date": day.isoformat(),
                 "category": label,
                 "amount": round(float(amount), 2),
                 "kind": kind,
+                "title": cost_title,
+                "note": cost_note,
             })
 
         if day > today:
@@ -439,7 +477,13 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             month_expenses += amount
 
     calendar_events.sort(key=lambda item: (item["date"], item["category"], item["amount"]))
-    calendar_events = calendar_events[:MAX_UPCOMING_CALENDAR_EVENTS]
+    calendar_events = calendar_events[:MAX_CALENDAR_COST_EVENTS]
+    # Retain the most recent trip events, then return one chronological mixed
+    # projection for Home Assistant's calendar range queries.
+    trip_calendar_events.sort(key=lambda item: (item["end"], item["start"]), reverse=True)
+    trip_calendar_events = trip_calendar_events[:MAX_CALENDAR_TRIP_EVENTS]
+    calendar_events.extend(trip_calendar_events)
+    calendar_events.sort(key=lambda item: item.get("start") or item.get("date") or "")
 
     def rounded(value: Decimal, places: int = 2) -> float:
         return round(float(value), places)
