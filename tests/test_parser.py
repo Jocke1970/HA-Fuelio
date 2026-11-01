@@ -219,6 +219,61 @@ class FuelioParserTests(unittest.TestCase):
         self.assertEqual(snapshot.fuel_forecast["consumption_basis_source"], "fuelio_latest_two")
         self.assertAlmostEqual(snapshot.fuel_forecast["consumption_basis_l_per_100km"], 5.9, places=2)
 
+
+    def test_future_costs_project_to_privacy_safe_calendar_events(self):
+        out = StringIO()
+        writer = csv.writer(out)
+
+        def section(name, header, *records):
+            writer.writerow([f"## {name}"])
+            writer.writerow(header)
+            writer.writerows(records)
+
+        section(
+            "Vehicle",
+            ["Name", "DistUnit", "FuelUnit", "Tank1Capacity"],
+            ["PRIVATE-REG", "0", "0", "60"],
+        )
+        section(
+            "Log",
+            ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)",
+             "VolumePrice", "l/100km (optional)", "TankNumber"],
+            ["2026-10-20 11:00", "1000", "50", "1", "1000", "20", "6", "1"],
+        )
+        section(
+            "CostCategories",
+            ["CostTypeID", "Name"],
+            ["10", "Service"],
+            ["20", "Försäkring"],
+        )
+        section(
+            "Costs",
+            ["Date", "Cost", "isTemplate", "isIncome", "CostTypeID", "Title", "Notes"],
+            ["2026-11-01 08:00", "1200", "0", "0", "10", "SECRET TITLE", "PRIVATE NOTE"],
+            ["2026-11-05 08:00", "2400", "0", "0", "20", "ANOTHER SECRET", "PRIVATE NOTE 2"],
+            ["2026-11-06 08:00", "999", "1", "0", "10", "TEMPLATE SECRET", "PRIVATE"],
+            ["2026-11-07 08:00", "500", "0", "1", "20", "INCOME SECRET", "PRIVATE"],
+            ["2026-10-31 08:00", "300", "0", "0", "10", "PAST SECRET", "PRIVATE"],
+        )
+        section(
+            "TripLog",
+            ["EndDate", "TripDist", "TripDuration", "TripCost", "StartOdo", "EndOdo"],
+        )
+
+        snapshot = parse_backup(out.getvalue(), today=date(2026, 11, 1))
+        self.assertEqual(snapshot.upcoming_expense_count, 1)
+        self.assertEqual(
+            snapshot.upcoming_calendar_events,
+            (
+                {"date": "2026-11-01", "category": "Service", "amount": 1200.0, "kind": "maintenance"},
+                {"date": "2026-11-05", "category": "Försäkring", "amount": 2400.0, "kind": "expense"},
+            ),
+        )
+        projected = repr(snapshot.upcoming_calendar_events)
+        self.assertNotIn("SECRET TITLE", projected)
+        self.assertNotIn("PRIVATE NOTE", projected)
+        self.assertNotIn("PRIVATE-REG", repr(snapshot))
+
     def test_cost_month_end_overflow_is_clamped_but_trip_dates_stay_strict(self):
         overflow = sample_csv().replace("2026-09-25 12:00", "2026-09-31 05:00", 1)
         snapshot = parse_backup(overflow, today=date(2026, 10, 1))
