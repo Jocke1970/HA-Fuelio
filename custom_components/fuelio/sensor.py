@@ -116,6 +116,15 @@ class FuelioSensor(CoordinatorEntity[FuelioCoordinator], SensorEntity):
                 "latest_two_consumption_count": snapshot.latest_two_consumption_count,
                 "history_truncated": snapshot.monthly_history_truncated,
                 "months_limit": 120,
+                "trip_statistics": {
+                    "years": list(snapshot.trip_statistics.get("years", ())),
+                    "months": list(snapshot.trip_statistics.get("months", ())),
+                    "weeks": list(snapshot.trip_statistics.get("weeks", ())),
+                    "days": list(snapshot.trip_statistics.get("days", ())),
+                    "distance_semantics": dict(snapshot.trip_statistics.get("distance_semantics", {})),
+                    "days_limit": snapshot.trip_statistics.get("days_limit"),
+                    "weeks_limit": snapshot.trip_statistics.get("weeks_limit"),
+                },
             }
         if key in {
             "estimated_fuel_remaining_l",
