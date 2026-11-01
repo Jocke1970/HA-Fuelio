@@ -99,7 +99,11 @@ const ENTITY_SLUGS = Object.freeze({
   ];
   const localizeHtml = (html) => {
     const language = String(document.documentElement.lang || navigator.language || "en").toLowerCase();
-    if (language.startsWith("sv")) return html;
+    if (language.startsWith("sv")) {
+      return html
+        .replaceAll("Uncategorized", "Okategoriserat")
+        .replaceAll("Other categories", "Övriga kategorier");
+    }
     return EN_REPLACEMENTS.reduce((out, [from, to]) => out.replaceAll(from, to), html);
   };
   const style = `
