@@ -257,7 +257,9 @@ const ENTITY_SLUGS = Object.freeze({
           return;
         }
         const tripGraphToggle = event.target.closest?.("[data-trip-graph-toggle]");
-        if (tripGraphToggle) {
+        const isTripGraphToggle = tripGraphToggle?.dataset &&
+          Object.prototype.hasOwnProperty.call(tripGraphToggle.dataset, "tripGraphToggle");
+        if (isTripGraphToggle) {
           this._tripGraphOpen = !this._tripGraphOpen;
           this._render();
           return;
