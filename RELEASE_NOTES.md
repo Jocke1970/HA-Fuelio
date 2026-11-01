@@ -1,3 +1,16 @@
+# HA-Fuelio 2026.11.1 🌐📅✅
+
+Stable bilingual integration and calendar-options release.
+
+- Promote the bilingual English/Swedish integration UI from `2026.11.1b1` to stable.
+- Keep all 42 sensor friendly names localized through Home Assistant translation keys.
+- Keep config flow, options, range-calibration services and both bundled dashboard cards bilingual.
+- Keep the Fuelio calendar optional through **Configure**, defaulting to enabled for backward compatibility.
+- Preserve the English-only repository documentation policy.
+- Preserve existing sensor unique IDs/entity IDs and the calendar unique ID.
+- No source ZIP, write-back, statistics or dashboard-layout logic changes from the validated beta.
+- Complete the release path `dev → beta → main`.
+
 # HA-Fuelio 2026.11.1b1 🌐📅
 
 Bilingual integration UI and optional calendar platform.
