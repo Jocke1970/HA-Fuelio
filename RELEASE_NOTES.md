@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.0 🚙✅
+
+Stable November 2026 release.
+
+Promoted from beta.11 after live Home Assistant validation of the complete desktop/mobile flow and final UI polish.
+
+- Stable dashboard architecture with compact summary expanders, Tank & räckvidd first, Resestatistik drill-down and inline graphs.
+- Resestatistik supports year → month → ISO week → day, with TripDist kept separate from ODO checkpoints and rolling 3-period averages on single-series charts.
+- Read-only Fuelio calendar includes timed TripLog journeys plus sanitized current/future cost events.
+- Measured full→full fuel-economy windows feed the range model with safe fallbacks and manual current-tank calibration.
+- Top status chips are left-aligned, wrap cleanly and retain readable availability/sync/latest-trip hierarchy.
+- Source remains the local Fuelio ZIP only; no write-back to Fuelio.
+- No entity-ID migration in this stable release. Existing 42 sensors plus the existing calendar entity remain intact.
+- Release path completed as `dev → beta → main`.
+
 # HA-Fuelio 2026.11.0b11 ✨🚙
 
 Top status-chip polish before stable promotion.
