@@ -44,6 +44,8 @@ add('sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown', 'monthly_co
   categories_all: [], history_truncated: false,
 });
 card.hass = { states, entities };
+card._open.costs = true;
+card._render();
 const before = card.shadowRoot.innerHTML;
 const overview = (html) => html.split('<div class="overview">')[1]?.split('<div class="tripbar">')[0];
 assert.ok(overview(before), 'four-panel overview must render');
