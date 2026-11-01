@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.0b1 🚙📊
+
+Measured full-to-full fuel economy and safer automatic range forecasting.
+
+- Add a pure `fuel_economy.py` engine that derives consumption from Fuelio full-tank anchors instead of trusting reported `l/100km` alone.
+- Bank partial fills into the next full-tank window and calculate aggregate consumption as total fuel / total distance; short windows never get equal weight with long windows.
+- Reject implausible windows and expose aggregate anomaly/exclusion counts. Fuelio `Missed` and `ExcludeDistance` flags invalidate affected measurement windows.
+- Keep tanks separated and avoid mixing Fuelio fuel types inside a measured window.
+- Expose measured-window count, weighted/recent/latest L/100 km, latest-five trend, confidence, anomaly count and exclusion count in the existing range-forecast attributes.
+- Automatic range-basis precedence is now: persisted manual calibration → recent measured full-to-full basis → Fuelio latest-two reported consumption fallback.
+- Manual current-tank calibration semantics from b17 are unchanged and still clear only when the latest actual primary-tank fill-up changes.
+- No new Home Assistant entities; sensor count remains **42**. The source remains local Fuelio ZIP only and read-only.
+- Add synthetic regression tests for full→partial→full banking, distance weighting, `Missed`/`ExcludeDistance`, implausible windows, confidence/trend and parser fallback behavior.
+- Version calendar rolls to **2026.11.0b1**. Release flow remains `dev → beta → main`; real-HA validation is required before any stable promotion.
+
 # HA-Fuelio 2026.10.0b17 🛠️
 
 Range-calibration persistence and setup robustness.

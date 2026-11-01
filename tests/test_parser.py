@@ -192,6 +192,33 @@ class FuelioParserTests(unittest.TestCase):
         )
         self.assertAlmostEqual(moved_calibrated.estimated_range_remaining_km, 890, places=1)
 
+    def test_measured_full_to_full_becomes_automatic_range_basis(self):
+        csv = forecast_csv().replace(
+            "2026-08-01 11:00,900,40,1",
+            "2026-08-01 11:00,200,40,1",
+        )
+        snapshot = parse_backup(csv, today=date(2026, 9, 21))
+        economy = snapshot.fuel_forecast["economy"]
+        self.assertEqual(economy["measured_windows"], 1)
+        self.assertAlmostEqual(economy["weighted_consumption_l_per_100km"], 6.25, places=2)
+        self.assertEqual(
+            snapshot.fuel_forecast["consumption_basis_source"],
+            "measured_full_to_full_recent",
+        )
+        self.assertAlmostEqual(
+            snapshot.fuel_forecast["consumption_basis_l_per_100km"],
+            6.25,
+            places=2,
+        )
+
+    def test_implausible_full_to_full_falls_back_to_fuelio_reports(self):
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        economy = snapshot.fuel_forecast["economy"]
+        self.assertEqual(economy["measured_windows"], 0)
+        self.assertGreaterEqual(economy["anomalous_windows"], 1)
+        self.assertEqual(snapshot.fuel_forecast["consumption_basis_source"], "fuelio_latest_two")
+        self.assertAlmostEqual(snapshot.fuel_forecast["consumption_basis_l_per_100km"], 5.9, places=2)
+
     def test_cost_month_end_overflow_is_clamped_but_trip_dates_stay_strict(self):
         overflow = sample_csv().replace("2026-09-25 12:00", "2026-09-31 05:00", 1)
         snapshot = parse_backup(overflow, today=date(2026, 10, 1))

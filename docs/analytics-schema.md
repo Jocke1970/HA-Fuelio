@@ -1,4 +1,4 @@
-# Fuelio analytics schema — beta.12 (2026-10-01)
+# Fuelio analytics schema — 2026.11.0b1
 
 This is the aggregate-only parsing contract. The historical beta.6 logged-trip-distance formula is **obsolete**; the old six entity ID slugs retain `_logged_km` solely for registry compatibility, while the actual denominator is now observed odometer distance.
 
@@ -12,6 +12,16 @@ This is the aggregate-only parsing contract. The historical beta.6 logged-trip-d
 
 - ODO checkpoints originate from `Log.Odo (km)` and `TripLog.StartOdo` / `TripLog.EndOdo`, associated with trip `StartDate` / `EndDate` when present. For each calendar month/year, use highest ODO on the latest day strictly preceding the period as baseline, then highest ODO on the latest day inside the period. Without a prior checkpoint, use the first in-period day's lowest reading and set `odo_coverage: partial_start`. No valid difference/rollback => `None`, never a fabricated ratio. Lifetime uses first imported day's minimum and latest day's maximum. This reflects observed checkpoint allocation, not exact midnight kilometres.
 - `TripLog.TripDist` is metres, summed /1000 as `logged_trip_km` and as the separate legacy `trip_distance_km` summaries. The selected-month `trip_count` is the number of logged trips, and `average_trip_km = sum(TripDist)/trip_count`; an absent trip count gives `None`. Do not add logged kilometres to the ODO difference or expect the measures to be identical.
+
+## Measured fuel economy and range basis
+
+HA-Fuelio now calculates an independent **full→full measured consumption** from the aggregate-safe Fuelio `Log` fields. A full primary-tank fill opens a measurement window. Partial fills after it are banked; the next full fill closes the window. Consumption is `100 × summed litres / odometer distance`. The overall and recent averages are distance/fuel weighted, not arithmetic means of per-fill consumption values.
+
+A window is excluded when Fuelio marks `Missed` or `ExcludeDistance` inside the window, when tank/fuel-type continuity is broken, or when basic plausibility checks fail (non-positive/very large distance, impossible fuel volume, or implausible L/100 km). Only aggregate counts and statistics are retained. Raw fill-up rows, station/GPS, notes and identifiers are not exposed to Home Assistant.
+
+The existing range forecast attributes now include an `economy` object with: `measured_windows`, `weighted_consumption_l_per_100km`, `recent_consumption_l_per_100km`, `recent_window_count`, `latest_window_l_per_100km`, `trend` (`increasing`/`stable`/`decreasing` in L/100 km), `trend_slope`, `anomalous_windows`, `excluded_windows`, `confidence` and `basis=full_to_full`.
+
+Automatic range consumption uses the recent measured full→full value when at least one valid measured window exists. Otherwise it falls back to the existing latest-up-to-two positive Fuelio-reported consumption values. A persisted manual range calibration still overrides both automatic sources until a genuinely newer primary-tank fill-up is observed.
 
 ## Two independent cost models
 
