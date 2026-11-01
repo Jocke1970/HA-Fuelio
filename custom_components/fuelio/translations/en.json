@@ -4,14 +4,185 @@
     "step": {
       "user": {
         "title": "Fuelio local ZIP backup",
-        "description": "Enter the path to a Fuelio sync ZIP inside your Home Assistant configuration folder. No Google Drive authentication is needed for this development build.",
-        "data": {"file_path": "ZIP file path"}
+        "description": "Enter the path to a Fuelio sync ZIP inside your Home Assistant configuration folder.",
+        "data": {
+          "file_path": "ZIP file path"
+        }
       }
     },
     "error": {
       "outside_config": "The ZIP must be inside the Home Assistant configuration folder.",
       "invalid_backup": "Cannot read the ZIP. Check that the file exists and is a metric Fuelio sync backup."
     },
-    "abort": {"already_configured": "This ZIP file is already configured."}
+    "abort": {
+      "already_configured": "This ZIP file is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fuelio options",
+        "description": "Choose which optional Fuelio features should be enabled.",
+        "data": {
+          "enable_calendar": "Enable Fuelio calendar"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "trip_count": {
+        "name": "Trips"
+      },
+      "trip_distance_km": {
+        "name": "Trip distance"
+      },
+      "monthly_trip_distance_km": {
+        "name": "Trip distance this month"
+      },
+      "trip_duration_hours": {
+        "name": "Travel time"
+      },
+      "estimated_trip_cost": {
+        "name": "Estimated trip costs (not actual spend)"
+      },
+      "fuel_count": {
+        "name": "Fuel-ups"
+      },
+      "fuel_litres": {
+        "name": "Fuel volume"
+      },
+      "fuel_cost": {
+        "name": "Fuel expenditure"
+      },
+      "monthly_fuel_cost": {
+        "name": "Fuel expenditure this month"
+      },
+      "last_fuel_price": {
+        "name": "Last fuel price"
+      },
+      "last_reported_consumption": {
+        "name": "Last reported fuel consumption"
+      },
+      "last_fillup_date": {
+        "name": "Last fuel-up"
+      },
+      "expense_count": {
+        "name": "Expense entries"
+      },
+      "other_expenses": {
+        "name": "Other expenditure"
+      },
+      "monthly_other_expenses": {
+        "name": "Other expenditure this month"
+      },
+      "upcoming_expense_count": {
+        "name": "Future expense entries"
+      },
+      "total_actual_cost": {
+        "name": "Total actual expenditure"
+      },
+      "last_trip_date": {
+        "name": "Last trip"
+      },
+      "latest_odometer_km": {
+        "name": "Latest odometer"
+      },
+      "distance_since_last_fillup_km": {
+        "name": "Distance since last fuel-up"
+      },
+      "estimated_fuel_remaining_l": {
+        "name": "Estimated fuel remaining"
+      },
+      "estimated_range_remaining_km": {
+        "name": "Estimated range remaining"
+      },
+      "estimated_days_to_next_fillup": {
+        "name": "Estimated days to next fuel-up"
+      },
+      "estimated_next_fillup_date": {
+        "name": "Estimated next fuel-up"
+      },
+      "last_app_sync": {
+        "name": "Last Fuelio app sync"
+      },
+      "fuel_count_month": {
+        "name": "Fuel-ups this month"
+      },
+      "fuel_count_year": {
+        "name": "Fuel-ups this year"
+      },
+      "fuel_cost_per_km_month": {
+        "name": "Fuel cost per odometer km this month"
+      },
+      "total_cost_per_km_month": {
+        "name": "Total cost per odometer km this month"
+      },
+      "fuel_cost_per_km_year": {
+        "name": "Fuel cost per odometer km this year"
+      },
+      "total_cost_per_km_year": {
+        "name": "Total cost per odometer km this year"
+      },
+      "fuel_cost_per_km_all": {
+        "name": "Fuel cost per odometer km since import start"
+      },
+      "total_cost_per_km_all": {
+        "name": "Total cost per odometer km since import start"
+      },
+      "fuel_price_min_year": {
+        "name": "Lowest fuel price this year"
+      },
+      "fuel_price_max_year": {
+        "name": "Highest fuel price this year"
+      },
+      "fuel_price_min_all": {
+        "name": "Lowest fuel price since import start"
+      },
+      "fuel_price_max_all": {
+        "name": "Highest fuel price since import start"
+      },
+      "consumption_min_year": {
+        "name": "Lowest reported consumption this year"
+      },
+      "consumption_max_year": {
+        "name": "Highest reported consumption this year"
+      },
+      "consumption_min_all": {
+        "name": "Lowest reported consumption since import start"
+      },
+      "consumption_max_all": {
+        "name": "Highest reported consumption since import start"
+      },
+      "monthly_cost_breakdown": {
+        "name": "Monthly cost breakdown"
+      }
+    }
+  },
+  "services": {
+    "calibrate_range": {
+      "name": "Calibrate range",
+      "description": "Adjust the current tank's theoretical range against the vehicle computer without writing to Fuelio.",
+      "fields": {
+        "entity_id": {
+          "name": "Fuelio entity",
+          "description": "An entity from the Fuelio configuration to calibrate."
+        },
+        "range_km": {
+          "name": "Range",
+          "description": "Current remaining range reported by the vehicle computer."
+        }
+      }
+    },
+    "clear_range_calibration": {
+      "name": "Clear range calibration",
+      "description": "Remove the manual calibration and return to Fuelio's automatic consumption basis.",
+      "fields": {
+        "entity_id": {
+          "name": "Fuelio entity",
+          "description": "An entity from the Fuelio configuration whose calibration should be cleared."
+        }
+      }
+    }
   }
 }
