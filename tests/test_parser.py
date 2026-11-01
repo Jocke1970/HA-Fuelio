@@ -323,7 +323,7 @@ class FuelioParserTests(unittest.TestCase):
         event = snapshot.upcoming_calendar_events[0]
         self.assertEqual(event["kind"], "trip")
         self.assertEqual(event["title"], "Jobbet")
-        self.assertEqual(event["category"], "Arbete")
+        self.assertNotIn("category", event)
         self.assertEqual(event["start"], "2026-11-01T07:42:00")
         self.assertEqual(event["end"], "2026-11-01T08:06:00")
         self.assertAlmostEqual(event["distance_km"], 18.123, places=3)
