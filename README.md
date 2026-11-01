@@ -54,7 +54,7 @@ entity: sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown
 title: Caddy
 ```
 
-För mobilkortet behöver `/fuelio/ha-fuelio-mobile-card.js` också läggas till som en separat **JavaScript Module** under dashboardens Resources. Use your **actual** monthly-breakdown entity ID on other installations; do not assume it starts with `sensor.mmk912_`. The card does not call HA services or make remote requests. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
+För mobilkortet behöver `/fuelio/ha-fuelio-mobile-card.js` också läggas till som en separat **JavaScript Module** under dashboardens Resources. Use your **actual** monthly-breakdown entity ID on other installations; do not assume it starts with `sensor.mmk912_`. Both cards stay local/read-only toward Fuelio; the range-calibration controls call only HA-Fuelio's local Home Assistant services and never write to Fuelio or the ZIP. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
 
 After `/fuelio/ha-fuelio-card.js` has been verified, the old manual copy `/config/www/ha-fuelio-card.js` may be deleted. It is no longer part of the supported update path.
 
