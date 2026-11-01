@@ -4,8 +4,8 @@
 
   const CARD_VERSION = "2026.11.0";
   const RESERVE_RANGE_KM = 75;
-  const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
-  const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const fmt = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   const ENTITY_SLUGS = Object.freeze({
     monthly_cost_breakdown: "monthly_cost_breakdown",
@@ -33,11 +33,29 @@
   const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
   const dateTime = (value) => {
     const parsed = new Date(String(value || ""));
-    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat("sv-SE", {
+    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
     }).format(parsed);
   };
 
+  const EN_REPLACEMENTS = [
+    ["Läser Fuelio …", "Loading Fuelio …"], ["RESERV", "RESERVE"], ["Sedan tankning", "Since fuel-up"],
+    ["Förbrukning", "Consumption"], ["Aktuell månad", "Current month"], ["Körsträcka", "Distance"],
+    ["Bränsle", "Fuel"], ["Övrigt", "Other"], ["Totalt", "Total"], ["Kostnad/km", "Cost/km"],
+    ["Bränsle/km", "Fuel/km"], ["Mer information", "More information"], ["Senaste tankning", "Latest fuel-up"],
+    ["Senaste literpris", "Latest fuel price"], ["Fuelio-förbrukning", "Fuelio consumption"],
+    ["Beräknad nästa tankning", "Estimated next fuel-up"], ["Dagar till teoretiskt tom", "Days to theoretical empty"],
+    ["Kalibrera mot bilens visade återstående räckvidd. Detta påverkar bara HA och återställs automatiskt vid nästa registrerade primärtankning.", "Calibrate against the vehicle's displayed remaining range. This only affects Home Assistant and resets automatically at the next registered primary-tank fill-up."],
+    ["Återstående räckvidd i kilometer", "Remaining range in kilometres"], ["Kalibrera", "Calibrate"],
+    ["Återställ automatisk", "Restore automatic"], ["Underlag", "Basis"], ["uppmätt", "measured"],
+    ["manuellt kalibrerad", "manually calibrated"], ["Estimerad tanknivå", "Estimated tank level"],
+    ["stigande", "rising"], ["fallande", "falling"], ["stabil", "stable"]
+  ];
+  const localizeHtml = (html) => {
+    const language = String(document.documentElement.lang || navigator.language || "en").toLowerCase();
+    if (language.startsWith("sv")) return html;
+    return EN_REPLACEMENTS.reduce((out, [from, to]) => out.replaceAll(from, to), html);
+  };
   const style = `
     :host { display:block; color:var(--primary-text-color,#202124); font:inherit; }
     * { box-sizing:border-box; }
@@ -219,7 +237,7 @@
     _render() {
       if (!this.shadowRoot || !this._config) return;
       if (!this._hass) {
-        this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">Läser Fuelio …</div></ha-card>`;
+        this.shadowRoot.innerHTML = localizeHtml(`<style>${style}</style><ha-card><div class="shell">Läser Fuelio …</div></ha-card>`);
         return;
       }
 
@@ -275,7 +293,7 @@
           </div>
         </div>` : "";
 
-      this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">
+      this.shadowRoot.innerHTML = localizeHtml(`<style>${style}</style><ha-card><div class="shell">
         <div class="header">
           <div class="title"><h2>🚙 ${esc(title)}</h2><div class="odo">${esc(decimal(this._value("latest_odometer_km"), "km"))}</div></div>
           <div class="sync">ZIP<br><strong>${esc(dateTime(this._state("last_app_sync")?.state))}</strong></div>
@@ -313,7 +331,7 @@
         </section>
 
         <div class="foot">Fuelio Mobile · read-only · ${CARD_VERSION}</div>
-      </div></ha-card>`;
+      </div></ha-card>`);
     }
   }
 
@@ -323,7 +341,7 @@
     window.customCards.push({
       type: "ha-fuelio-mobile-card",
       name: "HA-Fuelio Mobile Card",
-      description: "Kompakt mobilvy med tank, räckvidd, reservvarning, månadskostnader och kalibrering.",
+      description: "Compact mobile view with tank status, range, reserve warning, monthly costs and calibration.",
     });
   }
 })();
