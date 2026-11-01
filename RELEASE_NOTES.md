@@ -1,3 +1,20 @@
+# HA-Fuelio 2026.11.0b8 🧩🚙
+
+Compact overview summary expanders.
+
+- Convert **Drivmedel**, **Bokförda utgifter** and **Beräknad körkostnad/km** in the top overview into compact summary expanders.
+- Keep the most useful values visible directly in each collapsed header row:
+  - Drivmedel: latest reported consumption + running average.
+  - Booked costs: current month + current year.
+  - Estimated driving cost/km: current month + current year.
+- Expanding a group reveals secondary detail rows while preserving the same calculations and data source.
+- Keep **Mätarställning** as a normal always-visible overview card.
+- Keep all main dashboard sections collapsed by default as introduced in b7.
+- No new sensors, backend storage, write-back path or data-model changes.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b8`.
+- Release flow remains `dev → beta → main`; real Home Assistant validation is required before stable promotion.
+
 # HA-Fuelio 2026.11.0b7 📊🚙
 
 Inline Resestatistik graphs and calmer dashboard defaults.
