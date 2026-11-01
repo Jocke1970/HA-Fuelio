@@ -19,7 +19,9 @@ from homeassistant.util import dt as dt_util
 from .const import (
     ATTR_ENTITY_ID,
     ATTR_RANGE_KM,
+    CONF_ENABLE_CALENDAR,
     CONF_FILE_PATH,
+    DEFAULT_ENABLE_CALENDAR,
     DOMAIN,
     SERVICE_CALIBRATE_RANGE,
     SERVICE_CLEAR_RANGE_CALIBRATION,
@@ -238,6 +240,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     return True
 
 
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload Fuelio when an option changes."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a configured Fuelio backup."""
     await _async_register_frontend(hass)
@@ -245,7 +252,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_initialize()
     await coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    setup_platforms = ["sensor"]
+    if entry.options.get(CONF_ENABLE_CALENDAR, DEFAULT_ENABLE_CALENDAR):
+        setup_platforms.append("calendar")
+    await hass.config_entries.async_forward_entry_setups(entry, setup_platforms)
     return True
 
 
