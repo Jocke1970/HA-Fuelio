@@ -1,3 +1,17 @@
+# HA-Fuelio 2026.11.0b9 🧭🚙
+
+Overview order and odometer summary polish.
+
+- Move **Tank & räckvidd** to the first position in the top overview.
+- Convert **Mätarställning** into the same compact summary-expander model as the other overview groups.
+- Keep **Aktuell** odometer + **Månad** distance visible directly in the collapsed Mätarställning header.
+- Reveal monthly ODO detail, year distance and import-lifetime distance only when Mätarställning is expanded.
+- Keep Drivmedel, Bokförda utgifter and Beräknad körkostnad/km as compact summary expanders.
+- No new sensors, backend storage, write-back or data-model changes.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b9`.
+- Release flow remains `dev → beta → main`; real Home Assistant validation is required before stable promotion.
+
 # HA-Fuelio 2026.11.0b8 🧩🚙
 
 Compact overview summary expanders.
