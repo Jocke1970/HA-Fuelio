@@ -1,10 +1,10 @@
 # HA-Fuelio developer documentation
 
-**Current test prerelease: `2026.11.1b1` on `beta`; stable `2026.11.0` remains on `main`.** Read the [root README](../README.md) first for current installation, available features and limitations.
+**Current stable release: `2026.11.1` on `main`.** Read the [root README](../README.md) first for current installation, available features and limitations.
 
 ## Current documentation
 
-`2026.11.1b1` adds English/Swedish Home Assistant translations and an options flow for enabling/disabling the calendar platform (default enabled for existing entries). Repository documentation remains English-only.
+`2026.11.1` adds English/Swedish Home Assistant translations and an options flow for enabling/disabling the calendar platform (default enabled for existing entries). Repository documentation remains English-only.
 
 - [Beta.8 real HA validation and open findings](../BETA8_VALIDATION.md) — tested functionality, recurring paid parking/template ambiguity, ODO-versus-trip discrepancy, remaining checks and release gate.
 - [Current analytics schema and cost semantics](analytics-schema.md) — measured full→full fuel economy, range-basis precedence, categories, observed odometer distances, booked SEK/km, time-aware estimated driving costs and bounded attributes.
