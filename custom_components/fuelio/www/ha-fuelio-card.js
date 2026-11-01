@@ -2,8 +2,8 @@
 (() => {
   "use strict";
   const CARD_VERSION = "2026.11.0";
-  const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
-  const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
 // Old IDs may retain a pre-privacy vehicle prefix while new IDs use a generic one.
 const ENTITY_SLUGS = Object.freeze({
@@ -46,13 +46,62 @@ const ENTITY_SLUGS = Object.freeze({
   const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
   const dateTime = (value) => {
     const parsed = new Date(String(value || ""));
-    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat("sv-SE", {
+    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", {
       dateStyle: "short", timeStyle: "short"
     }).format(parsed);
   };
   const monthName = (key) => /^\d{4}-(0[1-9]|1[0-2])$/.test(key)
-    ? new Intl.DateTimeFormat("sv-SE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
+    ? new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
     : "Okänd månad";
+  const EN_REPLACEMENTS = [
+    ["Läser Fuelio …", "Loading Fuelio …"], ["Data tillgänglig", "Data available"], ["Data saknas", "Data unavailable"],
+    ["ZIP uppdaterad", "ZIP updated"], ["Senaste resa", "Latest trip"], ["Tank & räckvidd", "Tank & range"],
+    ["Bränsle kvar", "Fuel remaining"], ["Teoretisk räckvidd", "Theoretical range"], ["Sedan senaste tankning", "Since last fuel-up"],
+    ["Nästa tankning", "Next fuel-up"], ["Tillfälligt förbrukningsunderlag", "Temporary consumption basis"],
+    ["Mätarställning", "Odometer"], ["Drivmedel", "Fuel"], ["Bokförda utgifter", "Booked expenses"],
+    ["Beräknad körkostnad/km", "Estimated driving cost/km"], ["Aktuell", "Current"], ["Denna månad", "This month"],
+    ["Innevarande år", "Current year"], ["Sedan importstart", "Since import start"], ["Löpande snitt", "Running average"],
+    ["Tankat denna månad", "Fuelled this month"], ["Tankat i år", "Fuelled this year"], ["Bränsle · månad", "Fuel · month"],
+    ["Övrigt · månad", "Other · month"], ["Bränsle · år", "Fuel · year"], ["Övrigt · år", "Other · year"],
+    ["Beräknat bränsle · månad", "Estimated fuel · month"], ["Beräknat bränsle · år", "Estimated fuel · year"],
+    ["Årsöversikt", "Annual overview"], ["Resestatistik", "Trip statistics"], ["Kostnader", "Costs"],
+    ["Pris- & förbrukningsrekord", "Price & consumption records"], ["Service & underhåll", "Service & maintenance"],
+    ["Versionsinformation", "Version information"], ["Visa år", "Select year"], ["Visa månad", "Select month"],
+    ["Årsrapport", "Annual report"], ["Månadsstatistik", "Monthly statistics"], ["Nivå", "Level"],
+    ["Månad", "Month"], ["Vecka", "Week"], ["Dag", "Day"], ["Antal resor", "Trip count"],
+    ["Körtid", "Travel time"], ["Snitt per resa", "Average per trip"], ["Snitt/resa", "Avg/trip"],
+    ["TripDist vs ODO-sträcka", "TripDist vs ODO distance"], ["ODO-sträcka", "ODO distance"], ["Graf", "Chart"],
+    ["Ingen resestatistik för vald period.", "No trip statistics for the selected period."],
+    ["Ingen underliggande resedata för vald period.", "No underlying trip data for the selected period."],
+    ["Ingen månadsdata för valt år.", "No monthly data for the selected year."],
+    ["Inga kategoriserade utgifter för perioden.", "No categorized expenses for this period."],
+    ["Inga kategoriserade utgifter för valt år.", "No categorized expenses for the selected year."],
+    ["Rullande 3-perioders medel", "Rolling 3-period average"], ["Kalibrera teoretisk räckvidd", "Calibrate theoretical range"],
+    ["Bilens räckvidd just nu", "Vehicle range now"], ["Kalibrera", "Calibrate"], ["Återställ automatisk", "Restore automatic"],
+    ["Senaste tankning", "Latest fuel-up"], ["Senaste literpris", "Latest fuel price"], ["Rapporterad förbrukning", "Reported consumption"],
+    ["Beräknad förbrukning", "Estimated consumption"], ["Bränslekostnad", "Fuel cost"], ["Övriga utgifter", "Other expenses"],
+    ["Total kostnad", "Total cost"], ["Körsträcka", "Distance"], ["Bränsle/km", "Fuel/km"], ["Totalt/km", "Total/km"],
+    ["Antal tankningar", "Fuel-ups"], ["Literpris · kalenderåret", "Fuel price · calendar year"],
+    ["Rapporterad förbrukning · kalenderåret", "Reported consumption · calendar year"],
+    ["Rapporterad förbrukning · sedan importstart", "Reported consumption · since import start"],
+    ["Lägsta", "Lowest"], ["Högsta", "Highest"], ["Senaste ZIP-uppdatering", "Latest ZIP update"],
+    ["Stäng graf", "Close chart"], ["Grafen är inte tillgänglig ännu.", "The chart is not available yet."],
+    ["Dag är bottennivån. Graf per enskild resa kräver en separat resedatamodell och visas därför inte här.", "Day is the terminal level. Per-trip charts require a separate trip data model and are not shown here."],
+    ["TripDist och ODO är två separata mätningar.", "TripDist and ODO are separate measurements."],
+    ["TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.", "TripDist comes from Fuelio's logged/GPS-based distance; ODO distance is calculated from available odometer checkpoints."],
+    ["Bokförda utgifter per avläst ODO-kilometer", "Booked expenses per observed ODO kilometre"],
+    ["Beräknad körkostnad · förbrukat bränsle", "Estimated driving cost · consumed fuel"],
+    ["Uppskattad resekostnad · hela importen (inte faktisk utgift)", "Estimated trip cost · full import (not actual spend)"],
+    ["giltiga tankningar", "valid fuel-ups"], ["giltiga mätningar", "valid measurements"], ["Delperiod", "Partial period"],
+    ["Okänd månad", "Unknown month"], ["vald månad", "selected month"], ["Valt år i Årsöversikten", "Selected year in Annual overview"],
+    ["Summerat från Fuelios kategorier", "Summed from Fuelio categories"], ["Kort", "Card"], ["Frontend-version", "Frontend version"],
+    ["Resurs", "Resource"], ["Bränsle", "Fuel"], ["Rekord", "Records"]
+  ];
+  const localizeHtml = (html) => {
+    const language = String(document.documentElement.lang || navigator.language || "en").toLowerCase();
+    if (language.startsWith("sv")) return html;
+    return EN_REPLACEMENTS.reduce((out, [from, to]) => out.replaceAll(from, to), html);
+  };
   const style = `
     :host { display:block; container-type:inline-size; color:var(--primary-text-color,#202124); font:inherit; }
     * { box-sizing:border-box; }
@@ -540,7 +589,7 @@ const ENTITY_SLUGS = Object.freeze({
     }
     _monthLabel(key) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key || ""))) return "—";
-      return new Intl.DateTimeFormat("sv-SE", { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
+      return new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
     }
     _chartNumber(value) {
       if (value === null || value === undefined || value === "") return null;
@@ -638,7 +687,7 @@ const ENTITY_SLUGS = Object.freeze({
       if (level === "month") return `v${String(row.week || "").slice(-2)}`;
       if (level === "week") {
         const parsed = new Date(`${row.date}T12:00:00Z`);
-        return new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"numeric", timeZone:"UTC" }).format(parsed).replace(".", "");
+        return new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { weekday:"short", day:"numeric", month:"numeric", timeZone:"UTC" }).format(parsed).replace(".", "");
       }
       return "";
     }
@@ -933,7 +982,7 @@ const ENTITY_SLUGS = Object.freeze({
     _render() {
       if (!this.shadowRoot || !this._config) return;
       if (!this._hass) {
-        this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">Läser Fuelio …</div></ha-card>`;
+        this.shadowRoot.innerHTML = localizeHtml(`<style>${style}</style><ha-card><div class="shell">Läser Fuelio …</div></ha-card>`);
         return;
       }
       const allMonths = this._months();
@@ -1069,7 +1118,7 @@ const ENTITY_SLUGS = Object.freeze({
       } else if (this._tripLevel === "week") {
         tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSummary(this._tripRow("week", this._tripWeek), this._tripWeek ? `Vecka ${String(this._tripWeek).slice(-2)} · ${String(this._tripWeek).slice(0,4)}` : "—");
       } else {
-        const dayLabel = (value) => new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
+        const dayLabel = (value) => new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
         tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSelect("Dag", "fuelio-trip-day", tripDays, this._tripDay, dayLabel) + this._tripSummary(this._tripRow("day", this._tripDay), this._tripDay ? dayLabel(this._tripDay) : "—");
       }
       const tripKey = this._tripLevel === "year" ? this._tripYear : this._tripLevel === "month" ? this._tripMonth : this._tripLevel === "week" ? this._tripWeek : this._tripDay;
@@ -1149,7 +1198,7 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._tile("🔧", "Underhåll · sedan importstart", kroner(serviceAll), "Summerat från Fuelios kategorier")}
       </div><div class="notice">Beloppen hämtas från Fuelios bokförda kostnadskategorier med namn som innehåller Underhåll, Service eller Reparation. Serviceintervall och framtida underhållspåminnelser finns ännu inte i datamodellen.</div>`;
       const version = `<div class="summary"><span>Kort</span><strong>HA-Fuelio Card</strong></div><div class="summary"><span>Frontend-version</span><strong>${CARD_VERSION}</strong></div><div class="summary"><span>Senaste ZIP-uppdatering</span><strong>${esc(syncText)}</strong></div><div class="summary"><span>Resurs</span><strong>/fuelio/ha-fuelio-card.js</strong></div><div class="notice">ZIP-tiden är filens modifieringstid. I din rclone-kedja bevaras Drive-filens tid när ZIP:en kopieras till Home Assistant.</div>`;
-      this.shadowRoot.innerHTML = `<style>${style}</style><ha-card><div class="shell">
+      this.shadowRoot.innerHTML = localizeHtml(`<style>${style}</style><ha-card><div class="shell">
         <div class="header">
           <div class="title-wrap"><h2>🚙 ${esc(title)}</h2><span class="muted">Desktop dashboard · Fuelio read-only</span></div>
           <div class="header-meta">
@@ -1170,13 +1219,13 @@ const ENTITY_SLUGS = Object.freeze({
           ${this._section("version", "ℹ️", "Versionsinformation", version)}
         </div>
         <div class="foot muted">Fuelio · read-only · ${CARD_VERSION}</div>
-      </div></ha-card>${this._chartModal()}${this._rangeCalibrationModal(forecast)}`;
+      </div></ha-card>${this._chartModal()}${this._rangeCalibrationModal(forecast)}`);
     }
   }
 
   if (!customElements.get("ha-fuelio-card")) customElements.define("ha-fuelio-card", HaFuelioCard);
   window.customCards = window.customCards || [];
   if (!window.customCards.some((card) => card.type === "ha-fuelio-card")) {
-    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard med årsöversikt, interaktiva grafer, kostnader, tankningar och historiska rekord." });
+    window.customCards.push({ type: "ha-fuelio-card", name: "HA-Fuelio Card", description: "Fuelio dashboard with annual overview, interactive charts, costs, fuel-ups and historical records." });
   }
 })();
