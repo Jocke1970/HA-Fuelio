@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.0b4` on `beta`.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest development candidate: `2026.11.0b5` on `dev`; latest published test release remains `2026.11.0b4` on `beta` until CI/release promotion completes.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
 
-## Features and data contract (2026.11.0b4)
+## Features and data contract (2026.11.0b5)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
@@ -16,6 +16,7 @@ Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel
 - Desktop-first dashboard with an independent annual-report selector and internal SVG drill-down charts. The bundled read-only Lovelace card is served directly by the integration at `/fuelio/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
 - **Separate mobile dashboard** at `/fuelio/ha-fuelio-mobile-card.js`: compact odometer/sync header, horizontal estimated tank bar, range and consumption, current-month cost summary, and a collapsed details/calibration section. It shows **RESERV** only when the estimated range is known and below 75 km. The mobile card uses the same 42 entities and adds no backend sensors.
 - **Read-only Fuelio calendar**: one Home Assistant calendar entity combines current/future non-template, non-income `Costs` with the latest Fuelio `TripLog` journeys. Costs are all-day events and may include sanitized user-entered title/note; trips are timed events using `StartDate`/`EndDate`, `TripDist` for logged/GPS distance, and `EndOdo` only as an odometer checkpoint. GPS coordinates, route/place fields, internal IDs, vehicle identifiers and raw rows are never projected. Cost and trip projections are bounded independently at 256 events each. Estimated fuel-up forecasts remain excluded.
+- **Resestatistik**: bounded ZIP-derived drill-down for year → month → ISO week → day, shown in the desktop card with only the selected level expanded. Each period keeps Fuelio `TripDist`, ODO-checkpoint distance, trip count, total travel time and average trip length separate. No additional entity or local history database is created.
 
 ### Distances and cost definitions
 
@@ -82,4 +83,4 @@ node tests/test_estimate_frontend.mjs
 node tests/test_mobile_frontend.mjs
 ```
 
-**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. For b4, verify that cost title/note text renders as intended, recent trips appear as timed events with `TripDist` distance, no GPS/place data is exposed, and templates/incomes remain excluded. Do not promote to `main` based solely on automated tests.
+**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. For b5, verify Resestatistik selectors and period totals against Fuelio, confirm TripDist/ODO remain distinct, and confirm TripCategory no longer appears in calendar trip descriptions. Do not promote to `main` based solely on automated tests.

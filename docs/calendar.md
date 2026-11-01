@@ -1,6 +1,6 @@
 # Fuelio calendar model
 
-HA-Fuelio `2026.11.0b4` extends the existing read-only Home Assistant calendar with sanitized Fuelio costs and recent journeys from the local ZIP.
+HA-Fuelio `2026.11.0b5` extends the existing read-only Home Assistant calendar with sanitized Fuelio costs and recent journeys from the local ZIP.
 
 ## Source and scope
 
@@ -36,7 +36,7 @@ Calendar presentation uses:
 
 - `StartDate` and `EndDate` for event time
 - `title` / `Title` for the visible journey title when present
-- `TripCategory` and `TripNote` as sanitized local text when present
+- `TripNote` as sanitized local text when present
 - `TripDist` as the logged trip distance
 - `TripDuration` for duration
 - `EndOdo` only as an ending odometer checkpoint
@@ -60,4 +60,4 @@ The calendar does not support creating, editing or deleting Fuelio data.
 
 The existing Fuelio coordinator polls the local ZIP about every five minutes. Calendar data therefore changes with the same source refresh and does not require a separate poller.
 
-Release flow remains `dev → beta → main`. For b4, real-HA validation should confirm timed trip rendering, cost title/note rendering, correct TripDist values, and absence of GPS/place data before stable promotion.
+Release flow remains `dev → beta → main`. For b5, real-HA validation should also confirm that TripCategory is no longer displayed in trip events.

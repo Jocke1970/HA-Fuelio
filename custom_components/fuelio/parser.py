@@ -19,6 +19,8 @@ MAX_ROWS = 100_000
 MAX_MONTHS_IN_ATTRIBUTES = 120  # Bound recorder/state attribute size; newest ten years.
 MAX_CALENDAR_COST_EVENTS = 256  # Bound local read-only cost-calendar data.
 MAX_CALENDAR_TRIP_EVENTS = 256  # Bound local read-only trip-calendar data.
+MAX_TRIP_STATS_DAYS = 400
+MAX_TRIP_STATS_WEEKS = 160
 
 try:
     from .fuel_economy import FuelEconomyEvent, compute_fuel_economy
@@ -96,6 +98,7 @@ class FuelioSnapshot:
     last_app_sync: datetime | None
     fuel_forecast: dict
     upcoming_calendar_events: tuple[dict, ...]
+    trip_statistics: dict
 
 
 def range_calibration_consumption(snapshot: FuelioSnapshot, target_range_km: float) -> float:
@@ -302,6 +305,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     trip_count_by_month: dict[str, int] = {}
     logged_km_total = Decimal(0)
     logged_km_by_day: dict[date, Decimal] = {}
+    trip_count_by_day: dict[date, int] = {}
+    trip_duration_by_day: dict[date, Decimal] = {}
     trip_calendar_events: list[dict] = []
     for trip in sections["TripLog"]:
         end_dt = _datetime(trip["EndDate"])
@@ -321,6 +326,8 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             trip_count_by_month[month_key] = trip_count_by_month.get(month_key, 0) + 1
             logged_km_total += km
             logged_km_by_day[day] = logged_km_by_day.get(day, Decimal(0)) + km
+            trip_count_by_day[day] = trip_count_by_day.get(day, 0) + 1
+            trip_duration_by_day[day] = trip_duration_by_day.get(day, Decimal(0)) + duration
         if (day.year, day.month) == (today.year, today.month) and day <= today:
             month_trip_m += distance
         if day <= today and (last_trip is None or day > last_trip):
@@ -343,13 +350,11 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         if day <= today and start_dt <= end_dt:
             trip_title = " ".join((trip.get("title") or trip.get("Title") or "").split())[:96] or "Resa"
             trip_note = " ".join((trip.get("TripNote") or "").split())[:240] or None
-            trip_category = " ".join((trip.get("TripCategory") or "").split())[:64] or None
             trip_calendar_events.append({
                 "kind": "trip",
                 "start": start_dt.isoformat(timespec="seconds"),
                 "end": end_dt.isoformat(timespec="seconds"),
                 "title": trip_title,
-                "category": trip_category,
                 "distance_km": round(float(distance / 1000), 3),
                 "duration_minutes": round(float(duration / 60), 1),
                 "end_odometer_km": round(float(end_odo), 1) if end_odo is not None and end_odo > 0 else None,
@@ -535,6 +540,87 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
 
     def per_odometer_km(cost: Decimal, km: Decimal | None) -> float | None:
         return rounded(cost / km, 3) if km is not None and km > 0 else None
+
+    def trip_stats_period(start: date, end: date, *, key: str, value: str) -> dict:
+        days = [day for day in logged_km_by_day if start <= day <= end]
+        logged = sum((logged_km_by_day[day] for day in days), Decimal(0))
+        count = sum(trip_count_by_day.get(day, 0) for day in days)
+        duration = sum((trip_duration_by_day.get(day, Decimal(0)) for day in days), Decimal(0))
+        odo_km, coverage = odometer_distance(start, end)
+        row = {
+            key: value,
+            "trip_km": rounded(logged, 3),
+            "trip_count": count,
+            "duration_hours": rounded(duration / 3600, 3),
+            "average_trip_km": rounded(logged / count, 3) if count else None,
+            "odo_km": rounded(odo_km, 3) if odo_km is not None else None,
+        }
+        row.update(coverage)
+        return row
+
+    trip_days = sorted((day for day in logged_km_by_day if day <= today), reverse=True)
+    trip_years = sorted({day.year for day in trip_days}, reverse=True)
+    trip_months = sorted({(day.year, day.month) for day in trip_days}, reverse=True)
+    trip_weeks = sorted(
+        {(iso.year, iso.week) for day in trip_days for iso in [day.isocalendar()]},
+        reverse=True,
+    )
+
+    trip_stats_years = []
+    for year in trip_years[:40]:
+        trip_stats_years.append(
+            trip_stats_period(
+                date(year, 1, 1),
+                min(today, date(year, 12, 31)),
+                key="year",
+                value=str(year),
+            )
+        )
+
+    trip_stats_months = []
+    for year, month in trip_months[:MAX_MONTHS_IN_ATTRIBUTES]:
+        last = monthrange(year, month)[1]
+        trip_stats_months.append(
+            trip_stats_period(
+                date(year, month, 1),
+                min(today, date(year, month, last)),
+                key="month",
+                value=f"{year:04d}-{month:02d}",
+            )
+        )
+
+    trip_stats_weeks = []
+    for iso_year, iso_week in trip_weeks[:MAX_TRIP_STATS_WEEKS]:
+        week_start = date.fromisocalendar(iso_year, iso_week, 1)
+        week_end = min(today, week_start + timedelta(days=6))
+        row = trip_stats_period(
+            week_start,
+            week_end,
+            key="week",
+            value=f"{iso_year:04d}-W{iso_week:02d}",
+        )
+        row["start"] = week_start.isoformat()
+        row["end"] = week_end.isoformat()
+        trip_stats_weeks.append(row)
+
+    trip_stats_days = []
+    for day in trip_days[:MAX_TRIP_STATS_DAYS]:
+        trip_stats_days.append(
+            trip_stats_period(day, day, key="date", value=day.isoformat())
+        )
+
+    trip_statistics = {
+        "years": tuple(trip_stats_years),
+        "months": tuple(trip_stats_months),
+        "weeks": tuple(trip_stats_weeks),
+        "days": tuple(trip_stats_days),
+        "distance_semantics": {
+            "trip_km": "Fuelio TripDist",
+            "odo_km": "odometer checkpoints",
+        },
+        "days_limit": MAX_TRIP_STATS_DAYS,
+        "weeks_limit": MAX_TRIP_STATS_WEEKS,
+    }
 
     consumption_history = sorted(valid_consumptions, key=lambda item: item[1])
     price_history = sorted(valid_prices, key=lambda item: item[1])
@@ -905,6 +991,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         last_app_sync=None,
         fuel_forecast=forecast_meta,
         upcoming_calendar_events=tuple(calendar_events),
+        trip_statistics=trip_statistics,
     )
 
 

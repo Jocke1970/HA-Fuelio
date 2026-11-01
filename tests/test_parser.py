@@ -323,7 +323,7 @@ class FuelioParserTests(unittest.TestCase):
         event = snapshot.upcoming_calendar_events[0]
         self.assertEqual(event["kind"], "trip")
         self.assertEqual(event["title"], "Jobbet")
-        self.assertEqual(event["category"], "Arbete")
+        self.assertNotIn("category", event)
         self.assertEqual(event["start"], "2026-11-01T07:42:00")
         self.assertEqual(event["end"], "2026-11-01T08:06:00")
         self.assertAlmostEqual(event["distance_km"], 18.123, places=3)
@@ -335,6 +335,58 @@ class FuelioParserTests(unittest.TestCase):
         self.assertNotIn("PRIVATE START", projected)
         self.assertNotIn("PRIVATE END", projected)
         self.assertNotIn("StartOdo", projected)
+
+    def test_hierarchical_trip_statistics_keep_tripdist_and_odo_separate(self):
+        out = StringIO()
+        writer = csv.writer(out)
+
+        def section(name, header, *records):
+            writer.writerow([f"## {name}"])
+            writer.writerow(header)
+            writer.writerows(records)
+
+        section(
+            "Vehicle",
+            ["Name", "DistUnit", "FuelUnit", "Tank1Capacity"],
+            ["Test vehicle", "0", "0", "60"],
+        )
+        section(
+            "Log",
+            ["Data", "Odo (km)", "Fuel (litres)", "Full", "Price (optional)",
+             "VolumePrice", "l/100km (optional)", "TankNumber"],
+            ["2026-10-31 18:00", "1000", "50", "1", "1000", "20", "6", "1"],
+        )
+        section("Costs", ["Date", "Cost", "isTemplate", "isIncome"])
+        section(
+            "TripLog",
+            ["title", "StartDate", "EndDate", "TripDist", "TripDuration", "TripCost",
+             "StartOdo", "EndOdo", "TripCategory", "TripNote"],
+            ["A", "2026-11-01 08:00:00", "2026-11-01 08:20:00",
+             "10100", "1200", "0", "0", "1010", "1", ""],
+            ["B", "2026-11-01 17:00:00", "2026-11-01 17:30:00",
+             "12400", "1800", "0", "0", "1023", "1", ""],
+        )
+
+        snapshot = parse_backup(out.getvalue(), today=date(2026, 11, 1))
+        stats = snapshot.trip_statistics
+        self.assertEqual(stats["distance_semantics"]["trip_km"], "Fuelio TripDist")
+        self.assertEqual(stats["distance_semantics"]["odo_km"], "odometer checkpoints")
+
+        year = stats["years"][0]
+        month = stats["months"][0]
+        week = stats["weeks"][0]
+        day = stats["days"][0]
+        for row in (year, month, week, day):
+            self.assertAlmostEqual(row["trip_km"], 22.5, places=3)
+            self.assertEqual(row["trip_count"], 2)
+            self.assertAlmostEqual(row["duration_hours"], 50 / 60, places=3)
+            self.assertAlmostEqual(row["average_trip_km"], 11.25, places=3)
+            self.assertEqual(row["odo_km"], 23.0)
+
+        self.assertEqual(year["year"], "2026")
+        self.assertEqual(month["month"], "2026-11")
+        self.assertEqual(week["week"], "2026-W44")
+        self.assertEqual(day["date"], "2026-11-01")
 
     def test_cost_month_end_overflow_is_clamped_but_trip_dates_stay_strict(self):
         overflow = sample_csv().replace("2026-09-25 12:00", "2026-09-31 05:00", 1)
