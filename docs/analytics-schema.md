@@ -4,7 +4,7 @@ This is the aggregate-only parsing contract. The historical beta.6 logged-trip-d
 
 ## Cost categories and expense inclusion
 
-- Optional section `CostCategories`: join `Costs.CostTypeID` to `CostCategories.CostTypeID`, display `Name` only in aggregate totals. Missing or unmatched category IDs are `Okategoriserat`. Each category output is limited to 20 rows (19 plus combined `Övriga kategorier`). Internal IDs, cost titles, notes and raw individual rows are not exposed.
+- Optional section `CostCategories`: join `Costs.CostTypeID` to `CostCategories.CostTypeID`, display `Name` only in aggregate totals. Missing or unmatched category IDs are `Uncategorized`. Each category output is limited to 20 rows (19 plus combined `Other categories`). Internal IDs, cost titles, notes and raw individual rows are not exposed.
 - `Costs` records with `isTemplate=1` or `isIncome=1` are excluded *before* counting/spending. Future-dated non-template/non-income rows are tracked as upcoming, not booked. In the latest real-HA test, a legitimately paid recurring parking expense was manually marked `isTemplate=1`, so beta.8 excluded it from both category and expense totals. This is the **current implementation**, not proof of the correct desired accounting semantics. Avoid blindly summing templates: doing so could double-count planned or repeated costs. Observe an actual recurrence/export before changing the parser.
 - Actual/booked period totals = fuel-up payments + included non-fuel expenses dated within the calendar period. A transaction dated in the future is not current spending.
 
