@@ -1,3 +1,17 @@
+# HA-Fuelio 2026.11.0b6 📈🚙
+
+Trip-statistics drill-down charts.
+
+- Add clickable charts to **Resestatistik** for year, month and week levels.
+- **TripDist** and **ODO-sträcka** share a two-series line chart so their divergence can be inspected over time without treating either as authoritative for the other.
+- Add dedicated charts for trip count, total travel time and average distance per trip.
+- Drill charts down exactly one level: year → months, month → ISO weeks, week → days.
+- Keep day as the terminal statistics level; it deliberately has no one-point chart because per-trip day charts would require a different data model.
+- Reuse the existing self-contained SVG chart modal and the b5 bounded ZIP-derived trip-statistics attributes. No new sensors, no new backend storage and no external chart dependency are introduced.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b6`.
+- Release flow remains `dev → beta → main`; real Home Assistant validation is required before stable promotion.
+
 # HA-Fuelio 2026.11.0b5 🚙📊
 
 Hierarchical trip statistics plus calendar polish.
