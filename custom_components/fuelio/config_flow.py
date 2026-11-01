@@ -28,7 +28,7 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
         """Return the options flow for optional Fuelio features."""
-        return FuelioOptionsFlow(config_entry)
+        return FuelioOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Validate the ZIP and keep import paths inside HA's config folder."""
@@ -62,9 +62,6 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class FuelioOptionsFlow(config_entries.OptionsFlow):
     """Configure optional Fuelio features without replacing the config entry."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Configure optional platforms."""
