@@ -1,9 +1,10 @@
 /* HA-Fuelio Card 2026.11.0 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
+  const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
   const CARD_VERSION = "2026.11.0";
-  const fmt = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { maximumFractionDigits: 2 });
-  const money = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmt = new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat(UI_LANGUAGE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
 // Old IDs may retain a pre-privacy vehicle prefix while new IDs use a generic one.
 const ENTITY_SLUGS = Object.freeze({
@@ -46,12 +47,12 @@ const ENTITY_SLUGS = Object.freeze({
   const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
   const dateTime = (value) => {
     const parsed = new Date(String(value || ""));
-    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", {
+    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(UI_LANGUAGE, {
       dateStyle: "short", timeStyle: "short"
     }).format(parsed);
   };
   const monthName = (key) => /^\d{4}-(0[1-9]|1[0-2])$/.test(key)
-    ? new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
+    ? new Intl.DateTimeFormat(UI_LANGUAGE, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
     : "Okänd månad";
   const EN_REPLACEMENTS = [
     ["Läser Fuelio …", "Loading Fuelio …"], ["Data tillgänglig", "Data available"], ["Data saknas", "Data unavailable"],
@@ -98,7 +99,7 @@ const ENTITY_SLUGS = Object.freeze({
     ["Resurs", "Resource"], ["Bränsle", "Fuel"], ["Rekord", "Records"]
   ];
   const localizeHtml = (html) => {
-    const language = String(document.documentElement.lang || navigator.language || "en").toLowerCase();
+    const language = String(UI_LANGUAGE).toLowerCase();
     if (language.startsWith("sv")) {
       return html
         .replaceAll("Uncategorized", "Okategoriserat")
@@ -593,7 +594,7 @@ const ENTITY_SLUGS = Object.freeze({
     }
     _monthLabel(key) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(key || ""))) return "—";
-      return new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
+      return new Intl.DateTimeFormat(UI_LANGUAGE, { month:"short", timeZone:"UTC" }).format(new Date(`${key}-01T12:00:00Z`)).replace(".", "");
     }
     _chartNumber(value) {
       if (value === null || value === undefined || value === "") return null;
@@ -691,7 +692,7 @@ const ENTITY_SLUGS = Object.freeze({
       if (level === "month") return `v${String(row.week || "").slice(-2)}`;
       if (level === "week") {
         const parsed = new Date(`${row.date}T12:00:00Z`);
-        return new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { weekday:"short", day:"numeric", month:"numeric", timeZone:"UTC" }).format(parsed).replace(".", "");
+        return new Intl.DateTimeFormat(UI_LANGUAGE, { weekday:"short", day:"numeric", month:"numeric", timeZone:"UTC" }).format(parsed).replace(".", "");
       }
       return "";
     }
@@ -1122,7 +1123,7 @@ const ENTITY_SLUGS = Object.freeze({
       } else if (this._tripLevel === "week") {
         tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSummary(this._tripRow("week", this._tripWeek), this._tripWeek ? `Vecka ${String(this._tripWeek).slice(-2)} · ${String(this._tripWeek).slice(0,4)}` : "—");
       } else {
-        const dayLabel = (value) => new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
+        const dayLabel = (value) => new Intl.DateTimeFormat(UI_LANGUAGE, { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
         tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSelect("Dag", "fuelio-trip-day", tripDays, this._tripDay, dayLabel) + this._tripSummary(this._tripRow("day", this._tripDay), this._tripDay ? dayLabel(this._tripDay) : "—");
       }
       const tripKey = this._tripLevel === "year" ? this._tripYear : this._tripLevel === "month" ? this._tripMonth : this._tripLevel === "week" ? this._tripWeek : this._tripDay;
