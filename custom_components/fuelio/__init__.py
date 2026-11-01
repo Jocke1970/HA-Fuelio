@@ -32,7 +32,7 @@ from .parser import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "calendar"]
 FRONTEND_URL = "/fuelio/ha-fuelio-card.js"
 FRONTEND_FILE = Path(__file__).parent / "www" / "ha-fuelio-card.js"
 MOBILE_FRONTEND_URL = "/fuelio/ha-fuelio-mobile-card.js"

@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.0b3 📅🚙
+
+Read-only Fuelio calendar.
+
+- Add a `calendar` platform alongside the existing 42 sensors. The integration now exposes one read-only Fuelio calendar entity without adding sensor entities.
+- Project non-template, non-income Fuelio `Costs` rows dated today or later into bounded all-day Home Assistant calendar events.
+- Keep calendar data privacy-safe: only date, sanitized cost category, amount and coarse event kind are retained. Fuelio cost titles, notes, internal IDs, registration/VIN-like vehicle data and raw rows are not exposed.
+- Mark categories containing Underhåll, Service or Reparation as maintenance events; other rows remain general expense events.
+- Cap the in-memory calendar projection at 256 events.
+- Deliberately exclude `isTemplate=1` rows until Fuelio template/realized-obligation semantics are validated.
+- Deliberately exclude estimated next fuel-up from the calendar in b3 because that forecast can move as range and driving pace change.
+- Reuse the existing five-minute local ZIP coordinator; no second poller, external calendar account or write-back path is introduced.
+- Add synthetic parser privacy/regression coverage and release-tree checks for the calendar platform.
+- Release flow remains `dev → beta → main`; real Home Assistant validation of the calendar entity is required before stable promotion.
+
 # HA-Fuelio 2026.11.0b2 📱⛽
 
 Dedicated mobile dashboard.
