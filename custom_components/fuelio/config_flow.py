@@ -50,7 +50,7 @@ class FuelioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     # Do not expose a registration/vehicle name in the entry title.
                     # Existing titles are intentionally not silently migrated.
                     return self.async_create_entry(
-                        title="Fuelio vehicle",
+                        title="Fuelio",
                         data={CONF_FILE_PATH: str(candidate)},
                     )
             except (OSError, ValueError):
