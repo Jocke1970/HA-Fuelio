@@ -415,7 +415,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
 
         # Keep only a bounded, privacy-safe calendar projection. Fuelio cost
         # titles, notes and internal IDs never leave the parser.
-        if day >= today and len(calendar_events) < MAX_UPCOMING_CALENDAR_EVENTS:
+        if day >= today:
             normalized = label.casefold()
             kind = "maintenance" if any(
                 token in normalized for token in ("underhåll", "service", "reparation")
@@ -439,6 +439,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
             month_expenses += amount
 
     calendar_events.sort(key=lambda item: (item["date"], item["category"], item["amount"]))
+    calendar_events = calendar_events[:MAX_UPCOMING_CALENDAR_EVENTS]
 
     def rounded(value: Decimal, places: int = 2) -> float:
         return round(float(value), places)
