@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.0b11` on `beta`.** Development is gated `dev → beta → main`: beta.8 has been tested in a real Home Assistant installation, but its calculations are **not yet fully validated** against source records. Do not promote to `main` until remaining checks are resolved. Drivvo is only a comparison reference, never a data source for HA-Fuelio.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
 
-## Features and data contract (2026.11.0b11)
+## Features and data contract (2026.11.0)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
@@ -36,11 +36,11 @@ For detailed fields see [analytics schema](docs/analytics-schema.md), [calendar 
 
 ## Install or upgrade
 
-1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest *published* prerelease. Avoid the broken beta.1 tag. Update the latest published beta through HACS and restart Home Assistant.
+1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest stable release. Avoid the broken beta.1 tag. Update the stable release through HACS and restart Home Assistant.
 2. Keep your private ZIP at `fuelio/vehicle-1-sync.csv.zip` relative to the actual HA configuration root. Examples: `/config/fuelio/vehicle-1-sync.csv.zip` or `/homeassistant/fuelio/vehicle-1-sync.csv.zip`; **not** a nested `config/config` directory. Do not put the ZIP in GitHub or paste its private records into logs/issues.
 3. **Do not remove/re-add the config entry or rename existing entities.** The old and new entity-ID prefixes can coexist; the card maps sensors through the HA entity/device registry.
 4. **One-time migration for installations from b14 or older:** under dashboard **Resources**, replace the existing Fuelio JavaScript-module URL with `/fuelio/ha-fuelio-card.js`. Do not add a duplicate resource. After this migration, future Fuelio beta updates require no `/config/www` copy and no cache-bust query string.
-5. Update future betas through HACS and restart/reload Home Assistant as required. The integration serves the card directly from its installed HACS files with cache headers disabled.
+5. Update future releases through HACS and restart/reload Home Assistant as required. The integration serves the card directly from its installed HACS files with cache headers disabled.
 6. Manual Lovelace card YAML for the existing tested installation:
 
 ```yaml
@@ -85,4 +85,4 @@ node tests/test_estimate_frontend.mjs
 node tests/test_mobile_frontend.mjs
 ```
 
-**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. For b11, verify the top status chips render left-aligned beneath the title, wrap cleanly without an orphaned right-aligned chip, and retain readable availability/sync/latest-trip hierarchy. Do not promote to `main` based solely on automated tests.
+**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Stable `2026.11.0` was promoted after live Home Assistant validation of the beta.11 layout, including the top status-chip row. Do not promote to `main` based solely on automated tests.
