@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b10 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b11 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b10";
+  const CARD_VERSION = "2026.11.0b11";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -57,14 +57,18 @@ const ENTITY_SLUGS = Object.freeze({
     :host { display:block; container-type:inline-size; color:var(--primary-text-color,#202124); font:inherit; }
     * { box-sizing:border-box; }
     .shell { overflow:hidden; border-radius:26px; padding:18px; background:var(--ha-card-background,var(--card-background-color,#fff)); box-shadow:var(--ha-card-box-shadow,0 8px 28px #00000012); }
-    .header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+    .header { display:flex; flex-direction:column; align-items:stretch; gap:12px; margin-bottom:16px; }
     .title-wrap { display:flex; flex-direction:column; gap:5px; }
     h2 { font-size:1.3rem; margin:0; font-weight:800; letter-spacing:-.02em; }
     h3 { font-size:1rem; margin:0; }
-    .header-meta { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; }
+    .header-meta { display:flex; flex-wrap:wrap; justify-content:flex-start; align-items:center; gap:7px; width:100%; }
     .muted { color:var(--secondary-text-color,#68727d); font-size:.78rem; }
     .pill { padding:6px 10px; border-radius:999px; background:var(--secondary-background-color,#eef1f4); font-size:.72rem; white-space:nowrap; }
     .pill strong { font-weight:800; }
+    .pill-status { background:color-mix(in srgb,var(--card-background-color,#fff) 86%,var(--success-color,#4caf50) 14%); }
+    .pill-sync { background:var(--secondary-background-color,#eef1f4); }
+    .pill-trip { background:color-mix(in srgb,var(--secondary-background-color,#eef1f4) 72%,var(--card-background-color,#fff) 28%); color:var(--secondary-text-color,#68727d); }
+    .pill-trip strong { color:var(--primary-text-color,#202124); }
     .kpi-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
     .kpi { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:13px 14px; background:linear-gradient(180deg,color-mix(in srgb,var(--card-background-color,#fff) 96%,var(--primary-color,#03a9f4) 4%),var(--card-background-color,#fff)); }
     .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
@@ -1149,9 +1153,9 @@ const ENTITY_SLUGS = Object.freeze({
         <div class="header">
           <div class="title-wrap"><h2>🚙 ${esc(title)}</h2><span class="muted">Desktop dashboard · Fuelio read-only</span></div>
           <div class="header-meta">
-            <span class="pill">${isAvailable ? "✅ Data tillgänglig" : "⚠️ Data saknas"}</span>
-            <span class="pill">🗜️ ZIP uppdaterad <strong>${esc(syncText)}</strong></span>
-            <span class="pill">🚗 Senaste resa <strong>${esc(date(this._state("last_trip_date")?.state))}</strong></span>
+            <span class="pill pill-status">${isAvailable ? "✅ Data tillgänglig" : "⚠️ Data saknas"}</span>
+            <span class="pill pill-sync">🗜️ ZIP uppdaterad <strong>${esc(syncText)}</strong></span>
+            <span class="pill pill-trip">🚗 Senaste resa <strong>${esc(date(this._state("last_trip_date")?.state))}</strong></span>
           </div>
         </div>
         ${kpis}

@@ -1,3 +1,16 @@
+# HA-Fuelio 2026.11.0b11 ✨🚙
+
+Top status-chip polish before stable promotion.
+
+- Move the header status chips into a dedicated left-aligned row beneath the title.
+- Let the row wrap naturally from the left so **Senaste resa** no longer appears as an orphaned right-aligned chip on narrow layouts.
+- Give **Data tillgänglig** a subtle positive tint, keep **ZIP uppdaterad** as the primary neutral status, and visually tone down **Senaste resa**.
+- Keep all dashboard calculations, overview ordering, Resestatistik and entity contracts unchanged.
+- No new sensors, backend storage, write-back or data-model changes.
+- Preserve all 42 sensor unique IDs/entity IDs and the existing calendar entity; total integration entity count remains **43**.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.0b11`.
+- Release flow remains `dev → beta → main`; after final real-HA visual validation, this beta is intended for stable promotion.
+
 # HA-Fuelio 2026.11.0b10 🧹🚙
 
 Final beta layout polish before stable review.

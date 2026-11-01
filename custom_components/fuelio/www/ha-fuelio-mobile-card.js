@@ -1,8 +1,8 @@
-/* HA-Fuelio Mobile Card 2026.11.0b10 — compact Fuelio overview for phones. */
+/* HA-Fuelio Mobile Card 2026.11.0b11 — compact Fuelio overview for phones. */
 (() => {
   "use strict";
 
-  const CARD_VERSION = "2026.11.0b10";
+  const CARD_VERSION = "2026.11.0b11";
   const RESERVE_RANGE_KM = 75;
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
