@@ -1,6 +1,6 @@
 # HA-Fuelio developer documentation
 
-**Current development candidate: `2026.11.0b1` on `dev`; latest previously validated/published line remains prerelease-only.** Read the [root README](../README.md) first for current installation, available features and limitations.
+**Current test prerelease: `2026.11.0b1` on `beta`; it is not approved for stable `main` until real-HA validation is complete.** Read the [root README](../README.md) first for current installation, available features and limitations.
 
 ## Current documentation
 
