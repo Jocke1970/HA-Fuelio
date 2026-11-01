@@ -1,6 +1,6 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest development candidate: `2026.11.1b1` on `dev`; stable remains `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.1b1` on `beta`; stable remains `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
 
 ## Features and data contract (2026.11.1b1)
 
