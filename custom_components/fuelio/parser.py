@@ -17,6 +17,7 @@ MAX_ZIP_BYTES = 32 * 1024 * 1024
 MAX_CSV_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 100_000
 MAX_MONTHS_IN_ATTRIBUTES = 120  # Bound recorder/state attribute size; newest ten years.
+MAX_UPCOMING_CALENDAR_EVENTS = 256  # Bound in-memory read-only calendar data.
 
 try:
     from .fuel_economy import FuelEconomyEvent, compute_fuel_economy
@@ -93,6 +94,7 @@ class FuelioSnapshot:
     estimated_next_fillup_date: date | None
     last_app_sync: datetime | None
     fuel_forecast: dict
+    upcoming_calendar_events: tuple[dict, ...]
 
 
 def range_calibration_consumption(snapshot: FuelioSnapshot, target_range_km: float) -> float:
@@ -401,24 +403,42 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
     expenses = Decimal(0)
     month_expenses = Decimal(0)
     upcoming = 0
+    calendar_events: list[dict] = []
     for record in sections["Costs"]:
         if record.get("isTemplate", "0").strip() == "1" or record.get("isIncome", "0").strip() == "1":
             continue
         day = _cost_date(record["Date"])
         amount = _nonnegative(record["Cost"], default=Decimal(0))
         assert amount is not None
+        label = category_names.get(record.get("CostTypeID", "").strip(), "Okategoriserat")
         expense_count += 1
+
+        # Keep only a bounded, privacy-safe calendar projection. Fuelio cost
+        # titles, notes and internal IDs never leave the parser.
+        if day >= today and len(calendar_events) < MAX_UPCOMING_CALENDAR_EVENTS:
+            normalized = label.casefold()
+            kind = "maintenance" if any(
+                token in normalized for token in ("underhåll", "service", "reparation")
+            ) else "expense"
+            calendar_events.append({
+                "date": day.isoformat(),
+                "category": label,
+                "amount": round(float(amount), 2),
+                "kind": kind,
+            })
+
         if day > today:
             upcoming += 1
             continue
         expenses += amount
         bucket(day)["other"] += amount
         month_key = day.strftime("%Y-%m")
-        label = category_names.get(record.get("CostTypeID", "").strip(), "Okategoriserat")
         categories = expense_categories_by_month.setdefault(month_key, {})
         categories[label] = categories.get(label, Decimal(0)) + amount
         if (day.year, day.month) == (today.year, today.month):
             month_expenses += amount
+
+    calendar_events.sort(key=lambda item: (item["date"], item["category"], item["amount"]))
 
     def rounded(value: Decimal, places: int = 2) -> float:
         return round(float(value), places)
@@ -839,6 +859,7 @@ def parse_backup(text: str, *, today: date | None = None) -> FuelioSnapshot:
         estimated_next_fillup_date=estimated_next_fillup_date,
         last_app_sync=None,
         fuel_forecast=forecast_meta,
+        upcoming_calendar_events=tuple(calendar_events),
     )
 
 
