@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b6 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b7 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b6";
+  const CARD_VERSION = "2026.11.0b7";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -115,6 +115,10 @@ const ENTITY_SLUGS = Object.freeze({
     select { width:100%; color:inherit; background:var(--ha-card-background,var(--card-background-color,#fff)); border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:10px; font:inherit; }
     .summary { border:1px solid var(--divider-color,#e2e4e8); border-radius:14px; padding:10px 11px; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:9px; font-size:.77rem; }
     .summary strong { font-variant-numeric:tabular-nums; text-align:right; }
+    .trip-graph-box { margin-top:12px; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; overflow:hidden; }
+    .trip-graph-toggle { appearance:none; width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; border:0; background:var(--secondary-background-color,#f4f5f7); color:inherit; padding:11px 13px; font:inherit; font-weight:800; cursor:pointer; }
+    .trip-graph-body { padding:0 12px 12px; }
+    .trip-graph-inline { margin-top:10px; }
     .notice { padding:10px 11px; margin-top:9px; background:var(--secondary-background-color,#f4f5f7); color:var(--secondary-text-color,#68727d); border-radius:12px; font-size:.74rem; line-height:1.4; }
     .small { font-size:.72rem; }
     .foot { text-align:right; margin-top:12px; }
@@ -198,7 +202,7 @@ const ENTITY_SLUGS = Object.freeze({
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      this._open = { annual: true, tripstats: true, costs: true, fuel: true, records: false, service: false, version: false };
+      this._open = { annual: false, tripstats: false, costs: false, fuel: false, records: false, service: false, version: false };
       this._month = null;
       this._year = null;
       this._tripLevel = "year";
@@ -206,6 +210,8 @@ const ENTITY_SLUGS = Object.freeze({
       this._tripMonth = null;
       this._tripWeek = null;
       this._tripDay = null;
+      this._tripGraphOpen = false;
+      this._tripGraphMetric = "distance";
       this._chart = null;
       this._rangeDialog = false;
       this._rangeError = "";
@@ -247,6 +253,12 @@ const ENTITY_SLUGS = Object.freeze({
         const isClose = close?.dataset && Object.prototype.hasOwnProperty.call(close.dataset, "chartClose");
         if (isClose || event.target?.classList?.contains?.("chart-backdrop")) {
           this._chart = null;
+          this._render();
+          return;
+        }
+        const tripGraphToggle = event.target.closest?.("[data-trip-graph-toggle]");
+        if (tripGraphToggle) {
+          this._tripGraphOpen = !this._tripGraphOpen;
           this._render();
           return;
         }
@@ -342,6 +354,13 @@ const ENTITY_SLUGS = Object.freeze({
         if (event.target?.id === "fuelio-trip-day") {
           this._tripDay = candidate;
           this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-graph-metric") {
+          if (["distance","count","duration","average"].includes(candidate)) {
+            this._tripGraphMetric = candidate;
+            this._render();
+          }
         }
       });
       this.shadowRoot.addEventListener("submit", async (event) => {
@@ -460,13 +479,12 @@ const ENTITY_SLUGS = Object.freeze({
       if (!row) return `<div class="notice">Ingen resestatistik för vald period.</div>`;
       const odoDetail = row.odo_coverage === "partial_start" ? "Delperiod" :
         row.odo_start_on && row.odo_end_on ? `${row.odo_start_on} → ${row.odo_end_on}` : "ODO-underlag saknas";
-      const charts = this._tripLevel === "day" ? null : true;
       return `<div class="section-title">${esc(label)}</div><div class="grid">
-        ${this._tile("🧭", "TripDist", decimal(row.trip_km, "km"), "Fuelio TripDist", charts ? "trip-distance" : null)}
-        ${this._tile("🛣️", "ODO-sträcka", decimal(row.odo_km, "km"), odoDetail, charts ? "trip-distance" : null)}
-        ${this._tile("🚙", "Antal resor", decimal(row.trip_count, "st"), "", charts ? "trip-count" : null)}
-        ${this._tile("⏱️", "Körtid", decimal(row.duration_hours, "h"), "", charts ? "trip-duration" : null)}
-        ${this._tile("📏", "Snitt/resa", decimal(row.average_trip_km, "km"), "", charts ? "trip-average" : null)}
+        ${this._tile("🧭", "TripDist", decimal(row.trip_km, "km"), "Fuelio TripDist")}
+        ${this._tile("🛣️", "ODO-sträcka", decimal(row.odo_km, "km"), odoDetail)}
+        ${this._tile("🚙", "Antal resor", decimal(row.trip_count, "st"))}
+        ${this._tile("⏱️", "Körtid", decimal(row.duration_hours, "h"))}
+        ${this._tile("📏", "Snitt/resa", decimal(row.average_trip_km, "km"))}
       </div>`;
     }
     _maintenanceTotal(categories) {
@@ -652,6 +670,77 @@ const ENTITY_SLUGS = Object.freeze({
       }).join("");
       return `<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}</svg></div>`;
     }
+    _rollingAverage(rows, key, windowSize = 3) {
+      return rows.map((row, index) => {
+        const start = Math.max(0, index - windowSize + 1);
+        const values = rows.slice(start, index + 1)
+          .map((item) => this._chartNumber(item[key]))
+          .filter((value) => value !== null);
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+      });
+    }
+    _tripBarAverageChart(rows, level, key, label, unit = "") {
+      if (!rows.length) return `<div class="chart-empty">Ingen underliggande resedata för vald period.</div>`;
+      const width = 900, height = 360, left = 78, right = 24, top = 24, bottom = 58;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const raw = rows.map((row) => this._chartNumber(row[key]));
+      const average = this._rollingAverage(rows, key, 3);
+      const values = [...raw, ...average].filter((value) => value !== null);
+      const maxValue = Math.max(...values, 1) * 1.1;
+      const step = plotWidth / rows.length;
+      const barWidth = Math.min(step * .56, 58);
+      const points = [];
+      const bars = rows.map((row,index) => {
+        const value = raw[index];
+        const x = left + index * step + (step - barWidth) / 2;
+        const h = value === null ? 0 : value / maxValue * plotHeight;
+        const y = top + plotHeight - h;
+        const xLabel = this._tripChartLabel(row, level);
+        const avg = average[index];
+        if (avg !== null) {
+          const px = left + index * step + step / 2;
+          const py = top + plotHeight - avg / maxValue * plotHeight;
+          points.push(`${px},${py}`);
+        }
+        return `<rect class="series-a-fill" x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4"><title>${esc(xLabel)} · ${esc(label)}: ${esc(decimal(value, unit))}</title></rect><text x="${left + index * step + step / 2}" y="${top + plotHeight + 24}" text-anchor="middle">${esc(xLabel)}</text>`;
+      }).join("");
+      const averageLine = points.length > 1 ? `<polyline class="series-b-line" points="${points.join(" ")}"></polyline>` : "";
+      const averageDots = rows.map((row,index) => {
+        const avg = average[index];
+        if (avg === null) return "";
+        const x = left + index * step + step / 2;
+        const y = top + plotHeight - avg / maxValue * plotHeight;
+        return `<circle class="series-b-dot" cx="${x}" cy="${y}" r="4"><title>${esc(this._tripChartLabel(row, level))} · Rullande 3-perioders medel: ${esc(decimal(avg, unit))}</title></circle>`;
+      }).join("");
+      return `<div class="chart-legend"><span>${esc(label)}</span><span>Rullande 3-perioders medel</span></div><div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">${this._chartGrid(maxValue,left,top,plotWidth,plotHeight,unit)}${bars}${averageLine}${averageDots}</svg></div>`;
+    }
+    _tripInlineGraph(level, key) {
+      if (level === "day") return `<div class="notice">Dag är bottennivån. Graf per enskild resa kräver en separat resedatamodell och visas därför inte här.</div>`;
+      const rows = this._tripChartRows(level, key);
+      const period = this._tripChartPeriodLabel(level, key);
+      const sublevel = level === "year" ? "månad" : level === "month" ? "vecka" : "dag";
+      let content = "", note = "";
+      if (this._tripGraphMetric === "distance") {
+        content = this._tripLineChart(rows, level, [{key:"trip_km",label:"TripDist"},{key:"odo_km",label:"ODO-sträcka"}], "km");
+        note = `${period} uppdelat per ${sublevel}. TripDist och ODO visas utan rullande medel för att behålla jämförelsen ren.`;
+      } else if (this._tripGraphMetric === "count") {
+        content = this._tripBarAverageChart(rows, level, "trip_count", "Antal resor", "st");
+        note = `${period} uppdelat per ${sublevel}. Staplar = faktisk period, linje = rullande 3-perioders medel.`;
+      } else if (this._tripGraphMetric === "duration") {
+        content = this._tripBarAverageChart(rows, level, "duration_hours", "Körtid", "h");
+        note = `${period} uppdelat per ${sublevel}. Staplar = faktisk period, linje = rullande 3-perioders medel.`;
+      } else {
+        content = this._tripBarAverageChart(rows, level, "average_trip_km", "Snitt/resa", "km");
+        note = `${period} uppdelat per ${sublevel}. Staplar = faktisk period, linje = rullande 3-perioders medel.`;
+      }
+      return `<label class="select-label" for="fuelio-trip-graph-metric">Graf</label><select id="fuelio-trip-graph-metric">
+        <option value="distance" ${this._tripGraphMetric === "distance" ? "selected" : ""}>TripDist vs ODO-sträcka</option>
+        <option value="count" ${this._tripGraphMetric === "count" ? "selected" : ""}>Antal resor</option>
+        <option value="duration" ${this._tripGraphMetric === "duration" ? "selected" : ""}>Körtid</option>
+        <option value="average" ${this._tripGraphMetric === "average" ? "selected" : ""}>Snitt per resa</option>
+      </select><div class="trip-graph-inline">${content}</div><div class="notice">${esc(note)}</div>`;
+    }
+
     _tripChartPeriodLabel(level, key) {
       if (level === "year") return `År ${key}`;
       if (level === "month") return monthName(String(key));
@@ -940,7 +1029,9 @@ const ENTITY_SLUGS = Object.freeze({
         const dayLabel = (value) => new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
         tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSelect("Dag", "fuelio-trip-day", tripDays, this._tripDay, dayLabel) + this._tripSummary(this._tripRow("day", this._tripDay), this._tripDay ? dayLabel(this._tripDay) : "—");
       }
-      const tripstats = `${tripControls}${tripDetail}<div class="notice">TripDist och ODO är två separata mätningar. TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.</div>`;
+      const tripKey = this._tripLevel === "year" ? this._tripYear : this._tripLevel === "month" ? this._tripMonth : this._tripLevel === "week" ? this._tripWeek : this._tripDay;
+      const tripGraph = `<div class="trip-graph-box"><button type="button" class="trip-graph-toggle" data-trip-graph-toggle aria-expanded="${this._tripGraphOpen}"><span>📈 Graf</span><span aria-hidden="true">${this._tripGraphOpen ? "⌃" : "⌄"}</span></button>${this._tripGraphOpen ? `<div class="trip-graph-body">${this._tripInlineGraph(this._tripLevel, tripKey)}</div>` : ""}</div>`;
+      const tripstats = `${tripControls}${tripDetail}${tripGraph}<div class="notice">TripDist och ODO är två separata mätningar. TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.</div>`;
 
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total), "", "costs", allMonths[0]?.month?.slice(0,4))}
