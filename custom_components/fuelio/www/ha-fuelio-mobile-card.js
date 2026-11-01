@@ -1,11 +1,12 @@
 /* HA-Fuelio Mobile Card 2026.11.0 — compact Fuelio overview for phones. */
 (() => {
   "use strict";
+  const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
 
   const CARD_VERSION = "2026.11.0";
   const RESERVE_RANGE_KM = 75;
-  const fmt = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { maximumFractionDigits: 2 });
-  const money = new Intl.NumberFormat(document.documentElement.lang || navigator.language || "en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const fmt = new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat(UI_LANGUAGE, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   const ENTITY_SLUGS = Object.freeze({
     monthly_cost_breakdown: "monthly_cost_breakdown",
@@ -33,7 +34,7 @@
   const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
   const dateTime = (value) => {
     const parsed = new Date(String(value || ""));
-    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(document.documentElement.lang || navigator.language || "en-GB", {
+    return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(UI_LANGUAGE, {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
     }).format(parsed);
   };
@@ -52,7 +53,7 @@
     ["stigande", "rising"], ["fallande", "falling"], ["stabil", "stable"]
   ];
   const localizeHtml = (html) => {
-    const language = String(document.documentElement.lang || navigator.language || "en").toLowerCase();
+    const language = String(UI_LANGUAGE).toLowerCase();
     if (language.startsWith("sv")) return html;
     return EN_REPLACEMENTS.reduce((out, [from, to]) => out.replaceAll(from, to), html);
   };
