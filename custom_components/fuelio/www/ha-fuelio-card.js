@@ -1,7 +1,7 @@
-/* HA-Fuelio Card 2026.11.0b4 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.0b5 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
-  const CARD_VERSION = "2026.11.0b4";
+  const CARD_VERSION = "2026.11.0b5";
   const fmt = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -178,7 +178,7 @@ const ENTITY_SLUGS = Object.freeze({
       .range-panel { grid-column:span 2; }
       .dashboard-grid { grid-template-columns:minmax(0,1.6fr) minmax(340px,.9fr); align-items:start; }
       .section-costs { grid-row:span 2; }
-      .section-annual,.section-records,.section-service,.section-version { grid-column:1 / -1; }
+      .section-annual,.section-tripstats,.section-records,.section-service,.section-version { grid-column:1 / -1; }
       .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
       .section-costs .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     }
@@ -198,9 +198,14 @@ const ENTITY_SLUGS = Object.freeze({
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
-      this._open = { annual: true, costs: true, fuel: true, records: false, service: false, version: false };
+      this._open = { annual: true, tripstats: true, costs: true, fuel: true, records: false, service: false, version: false };
       this._month = null;
       this._year = null;
+      this._tripLevel = "year";
+      this._tripYear = null;
+      this._tripMonth = null;
+      this._tripWeek = null;
+      this._tripDay = null;
       this._chart = null;
       this._rangeDialog = false;
       this._rangeError = "";
@@ -298,6 +303,39 @@ const ENTITY_SLUGS = Object.freeze({
             this._year = candidate;
             this._render();
           }
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-level") {
+          if (["year","month","week","day"].includes(candidate)) {
+            this._tripLevel = candidate;
+            this._render();
+          }
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-year") {
+          this._tripYear = candidate;
+          this._tripMonth = null;
+          this._tripWeek = null;
+          this._tripDay = null;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-month") {
+          this._tripMonth = candidate;
+          this._tripWeek = null;
+          this._tripDay = null;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-week") {
+          this._tripWeek = candidate;
+          this._tripDay = null;
+          this._render();
+          return;
+        }
+        if (event.target?.id === "fuelio-trip-day") {
+          this._tripDay = candidate;
+          this._render();
         }
       });
       this.shadowRoot.addEventListener("submit", async (event) => {
@@ -395,6 +433,34 @@ const ENTITY_SLUGS = Object.freeze({
       if (!Array.isArray(rows)) return [];
       return rows.filter((row) => row && /^\d{4}$/.test(String(row.year)) &&
         ["fuel", "other", "total"].every((key) => Number.isFinite(row[key]))).slice(0, 40);
+    }
+    _tripStats() {
+      const stats = this._state("monthly_cost_breakdown")?.attributes?.trip_statistics;
+      return stats && typeof stats === "object" ? stats : { years: [], months: [], weeks: [], days: [] };
+    }
+    _tripRows(level) {
+      const rows = this._tripStats()?.[`${level}s`];
+      return Array.isArray(rows) ? rows : [];
+    }
+    _tripRow(level, key) {
+      const field = level === "day" ? "date" : level;
+      return this._tripRows(level).find((row) => String(row?.[field]) === String(key)) || null;
+    }
+    _tripSelect(label, id, values, selected, formatter = (value) => value) {
+      const options = values.map((value) => `<option value="${esc(String(value))}" ${String(value) === String(selected) ? "selected" : ""}>${esc(formatter(value))}</option>`).join("");
+      return `<label class="select-label" for="${id}">${esc(label)}</label><select id="${id}" ${values.length ? "" : "disabled"}>${options}</select>`;
+    }
+    _tripSummary(row, label) {
+      if (!row) return `<div class="notice">Ingen resestatistik för vald period.</div>`;
+      const odoDetail = row.odo_coverage === "partial_start" ? "Delperiod" :
+        row.odo_start_on && row.odo_end_on ? `${row.odo_start_on} → ${row.odo_end_on}` : "ODO-underlag saknas";
+      return `<div class="section-title">${esc(label)}</div><div class="grid">
+        ${this._tile("🧭", "TripDist", decimal(row.trip_km, "km"), "Fuelio TripDist")}
+        ${this._tile("🛣️", "ODO-sträcka", decimal(row.odo_km, "km"), odoDetail)}
+        ${this._tile("🚙", "Antal resor", decimal(row.trip_count, "st"))}
+        ${this._tile("⏱️", "Körtid", decimal(row.duration_hours, "h"))}
+        ${this._tile("📏", "Snitt/resa", decimal(row.average_trip_km, "km"))}
+      </div>`;
     }
     _maintenanceTotal(categories) {
       if (!Array.isArray(categories)) return 0;
@@ -661,6 +727,16 @@ const ENTITY_SLUGS = Object.freeze({
       const currentYearData = allYears.find((item) => String(item.year) === String(nowMonth?.month?.slice(0, 4)));
       const aggregate = this._state("monthly_cost_breakdown")?.attributes || {};
       const lifetime = aggregate.estimated_lifetime || {};
+      const tripStats = this._tripStats();
+      const tripYears = (tripStats.years || []).map((row) => String(row.year));
+      if (!this._tripYear || !tripYears.includes(String(this._tripYear))) this._tripYear = tripYears[0] || null;
+      const tripMonths = (tripStats.months || []).filter((row) => !this._tripYear || String(row.month).startsWith(`${this._tripYear}-`)).map((row) => String(row.month));
+      if (!this._tripMonth || !tripMonths.includes(String(this._tripMonth))) this._tripMonth = tripMonths[0] || null;
+      const tripWeeks = (tripStats.weeks || []).filter((row) => !this._tripYear || String(row.week).startsWith(`${this._tripYear}-W`)).map((row) => String(row.week));
+      if (!this._tripWeek || !tripWeeks.includes(String(this._tripWeek))) this._tripWeek = tripWeeks[0] || null;
+      const selectedTripWeek = this._tripRow("week", this._tripWeek);
+      const tripDays = (tripStats.days || []).filter((row) => selectedTripWeek ? String(row.date) >= String(selectedTripWeek.start) && String(row.date) <= String(selectedTripWeek.end) : (!this._tripMonth || String(row.date).startsWith(`${this._tripMonth}-`))).map((row) => String(row.date));
+      if (!this._tripDay || !tripDays.includes(String(this._tripDay))) this._tripDay = tripDays[0] || null;
       const forecast = this._state("estimated_range_remaining_km")?.attributes || {};
       const coverageText = (row) => row?.estimate_coverage === "missing_rate" ? "Pris-/förbrukningsunderlag saknas" :
         row?.estimate_coverage?.includes?.("one_consumption_value") ? "En förbrukningsavläsning – begränsat underlag" :
@@ -734,6 +810,22 @@ const ENTITY_SLUGS = Object.freeze({
         </div>
       </div>
       <div class="notice">Årsrapporten använder Fuelios importerade data för valt kalenderår. Första importerade året kan vara en delperiod; avläst körsträcka bygger på ODO-checkpoints. Rapporterat snitt är medelvärdet av årets giltiga positiva L/100 km-poster. Genomsnittligt literpris är faktiskt bokförd bränslekostnad delat med årets tankade liter.</div>`;
+
+      const tripLevelOptions = [["year","År"],["month","Månad"],["week","Vecka"],["day","Dag"]];
+      const tripLevelHtml = tripLevelOptions.map(([value,label]) => `<option value="${value}" ${value === this._tripLevel ? "selected" : ""}>${label}</option>`).join("");
+      const tripControls = `<label class="select-label" for="fuelio-trip-level">Nivå</label><select id="fuelio-trip-level">${tripLevelHtml}</select>`;
+      let tripDetail = "";
+      if (this._tripLevel === "year") {
+        tripDetail = this._tripSelect("Välj år", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSummary(this._tripRow("year", this._tripYear), `År ${this._tripYear || "—"}`);
+      } else if (this._tripLevel === "month") {
+        tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Månad", "fuelio-trip-month", tripMonths, this._tripMonth, monthName) + this._tripSummary(this._tripRow("month", this._tripMonth), this._tripMonth ? monthName(this._tripMonth) : "—");
+      } else if (this._tripLevel === "week") {
+        tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSummary(this._tripRow("week", this._tripWeek), this._tripWeek ? `Vecka ${String(this._tripWeek).slice(-2)} · ${String(this._tripWeek).slice(0,4)}` : "—");
+      } else {
+        const dayLabel = (value) => new Intl.DateTimeFormat("sv-SE", { weekday:"short", day:"numeric", month:"short", timeZone:"UTC" }).format(new Date(`${value}T12:00:00Z`));
+        tripDetail = this._tripSelect("År", "fuelio-trip-year", tripYears, this._tripYear) + this._tripSelect("Vecka", "fuelio-trip-week", tripWeeks, this._tripWeek, (value) => `Vecka ${String(value).slice(-2)} · ${String(value).slice(0,4)}`) + this._tripSelect("Dag", "fuelio-trip-day", tripDays, this._tripDay, dayLabel) + this._tripSummary(this._tripRow("day", this._tripDay), this._tripDay ? dayLabel(this._tripDay) : "—");
+      }
+      const tripstats = `${tripControls}${tripDetail}<div class="notice">TripDist och ODO är två separata mätningar. TripDist kommer från Fuelios loggade/GPS-baserade körsträcka; ODO-sträcka räknas från tillgängliga mätarställnings-checkpoints.</div>`;
 
       const costs = `<div class="grid">
         ${this._tile("📅", "Denna månad", kroner(allMonths[0]?.total), "", "costs", allMonths[0]?.month?.slice(0,4))}
@@ -821,6 +913,7 @@ const ENTITY_SLUGS = Object.freeze({
         <div class="tripbar"><span>🛣️ <strong>${esc(decimal(this._value("trip_count"), "resor"))}</strong> · ${esc(decimal(this._value("trip_distance_km"), "km"))} · ${esc(decimal(this._value("trip_duration_hours"), "h"))}</span><span class="muted">Löpande Fuelio-statistik sedan importstart</span></div>
         <div class="dashboard-grid">
           ${this._section("annual", "📊", "Årsöversikt", annual)}
+          ${this._section("tripstats", "🚙", "Resestatistik", tripstats)}
           ${this._section("costs", "💳", "Kostnader", costs)}
           ${this._section("fuel", "⛽", "Bränsle", fuel)}
           ${this._section("records", "🏆", "Pris- & förbrukningsrekord", records)}
