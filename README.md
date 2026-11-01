@@ -1,24 +1,26 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.0` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.1` on `main`.** Development is gated `dev → beta → main`; `2026.11.0` is the stable release after live Home Assistant validation of the beta.11 UI and data flow.
 
-## Features and data contract (2026.11.0)
+## Features and data contract (2026.11.1)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
+- **Bilingual integration UI (English/Swedish):** config flow, options, sensor friendly names, services and both bundled dashboard cards follow the Home Assistant/browser language. Backend aggregate data stays language-neutral where practical.
+- **Optional calendar platform:** the read-only Fuelio calendar is enabled by default for backward compatibility, but can be disabled under the integration's **Configure** options. Changing the option reloads the config entry; sensor entities remain available.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
 - The `Monthly cost breakdown` sensor exposes bounded aggregate attributes: `months` (up to 120), `years` (up to 40), `categories_all`, `lifetime_odometer_km`, `estimated_lifetime`, `latest_two_consumption`, `latest_two_consumption_count` and coverage metadata. Period rows include booked fuel/non-fuel costs, purchased litres, observed ODO distance, logged trip km, trip count, mean logged trip length, fill-up count, categories and separately labelled booked/estimated cost metrics. Year rows additionally include average reported consumption/sample count, weighted actual average fuel price and yearly min/max price/consumption values. All-month history may be truncated for HA attribute size; lifetime aggregates are separate.
-- Fuelio can export a realized recurring cost on an impossible month-end date (for example `2026-09-31`). Beta.11 clamps only cost-row day 29-31 overflow to the real last day of that month; other date parsing remains strict.
-- Costs are categorized by `Costs.CostTypeID` joined to `CostCategories.CostTypeID`; only the category's display name and aggregate amount are exposed. Missing mappings become `Okategoriserat`, with category-list overflow grouped into `Övriga kategorier`. **`isTemplate=1` and `isIncome=1` entries are excluded**, as are future-dated expenses from actual spending. A genuinely paid item manually marked as a template is therefore *also excluded*; see [validation and open questions](BETA8_VALIDATION.md). Do not assume every recurring entry is a realized payment.
+- Fuelio can export a realized recurring cost on an impossible month-end date (for example `2026-09-31`). The parser clamps only cost-row day 29-31 overflow to the real last day of that month; other date parsing remains strict.
+- Costs are categorized by `Costs.CostTypeID` joined to `CostCategories.CostTypeID`; only the category's display name and aggregate amount are exposed. Missing mappings become `Uncategorized`, with category-list overflow grouped into `Other categories`. **`isTemplate=1` and `isIncome=1` entries are excluded**, as are future-dated expenses from actual spending. A genuinely paid item manually marked as a template is therefore *also excluded*; see [validation and open questions](BETA8_VALIDATION.md). Do not assume every recurring entry is a realized payment.
 - Eight fuel records: lowest/highest positive recorded unit prices and individually reported L/100 km, for the current calendar year and imported history, with `recorded_on` attributes. A missing report remains unknown; the latest-two-reading average is an explicitly separate estimate.
 - **Measured fuel economy:** independent full→full L/100 km windows from Fuelio `Full`, litres and odometer values. Partial fills are banked until the next full tank, aggregates are distance/fuel weighted, and `Missed`, `ExcludeDistance`, implausible windows, tank changes and fuel-type breaks are excluded. The range forecast exposes measured-window count, weighted/recent/latest consumption, latest-five trend, anomaly/exclusion counts and confidence. Automatic range basis precedence is manual calibration → recent measured full→full → Fuelio latest-two reported consumption.
 - Clickable KPI/annual tiles open self-contained SVG chart modals for monthly booked costs, ODO distance, purchased litres, booked-vs-estimated cost/km and annual expense-category distribution. Graphs use the same bounded aggregate attributes already exposed by the integration; missing values are not converted to zero.
-- **Service & underhåll** surfaces existing booked Fuelio categories matching Underhåll, Service or Reparation for the selected month, selected annual-report year and import lifetime. This is presentation of already-counted costs, not a separate accounting model.
+- **Service & maintenance** surfaces existing booked Fuelio categories matching `Underhåll`, `Service` or `Reparation` for the selected month, selected annual-report year and import lifetime. This is presentation of already-counted costs, not a separate accounting model.
 - Desktop-first dashboard with an independent annual-report selector and internal SVG drill-down charts. The bundled read-only Lovelace card is served directly by the integration at `/fuelio/ha-fuelio-card.js`: current-period overview with tank/range forecasting, historical month selector, categories, fuel statistics and fill-ups, records and estimated-versus-booked cost sections. Card icon: `custom_components/fuelio/brand/icon.png`.
 - **Top status chips** now render as a left-aligned wrapped status row beneath the title. Availability gets a subtle positive tint, ZIP sync remains the primary neutral status, and latest trip is visually quieter so wrapped layouts stay balanced.
-- **Compact overview summary expanders**: Mätarställning, Drivmedel, Bokförda utgifter and Beräknad körkostnad/km keep key current values visible in their collapsed header rows. Tank & räckvidd now renders first in the overview, followed by the compact Mätarställning summary. Expanding reveals secondary details without changing calculations.
+- **Compact overview summary expanders**: Odometer, Fuel, Booked expenses and Estimated driving cost/km keep key current values visible in their collapsed header rows. Tank & range now renders first in the overview, followed by the compact Odometer summary. Expanding reveals secondary details without changing calculations.
 - **Separate mobile dashboard** at `/fuelio/ha-fuelio-mobile-card.js`: compact odometer/sync header, horizontal estimated tank bar, range and consumption, current-month cost summary, and a collapsed details/calibration section. It shows **RESERV** only when the estimated range is known and below 75 km. The mobile card uses the same 42 entities and adds no backend sensors.
 - **Read-only Fuelio calendar**: one Home Assistant calendar entity combines current/future non-template, non-income `Costs` with the latest Fuelio `TripLog` journeys. Costs are all-day events and may include sanitized user-entered title/note; trips are timed events using `StartDate`/`EndDate`, `TripDist` for logged/GPS distance, and `EndOdo` only as an odometer checkpoint. GPS coordinates, route/place fields, internal IDs, vehicle identifiers and raw rows are never projected. Cost and trip projections are bounded independently at 256 events each. Estimated fuel-up forecasts remain excluded.
-- **Resestatistik**: bounded ZIP-derived drill-down for year → month → ISO week → day. The main dashboard sections now start collapsed. Inside Resestatistik, a nested **Graf** expander follows the same selected level/period. TripDist vs ODO remains a clean two-line comparison; trip count, travel time and average trip length use actual-period bars plus a rolling 3-period mean line. Charts drill down one level (year→months, month→weeks, week→days). Day is terminal. No additional entity or local history database is created. The lifetime trip summary (trip count, logged km and travel time) now lives inside Resestatistik instead of between the overview and dashboard sections.
+- **Trip statistics**: bounded ZIP-derived drill-down for year → month → ISO week → day. The main dashboard sections now start collapsed. Inside Trip statistics, a nested **Chart** expander follows the same selected level/period. TripDist vs ODO remains a clean two-line comparison; trip count, travel time and average trip length use actual-period bars plus a rolling 3-period mean line. Charts drill down one level (year→months, month→weeks, week→days). Day is terminal. No additional entity or local history database is created. The lifetime trip summary (trip count, logged km and travel time) now lives inside Trip statistics instead of between the overview and dashboard sections.
 
 ### Distances and cost definitions
 
@@ -34,6 +36,10 @@ Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel
 
 For detailed fields see [analytics schema](docs/analytics-schema.md), [calendar model](docs/calendar.md), [ODO algorithm](ODOMETER_ALGORITHM.md) and [beta.8 test status](BETA8_VALIDATION.md).
 
+### Integration options
+
+Open **Settings → Devices & services → Fuelio → Configure** to enable or disable the optional Fuelio calendar. Existing installations default to **enabled**, preserving the previous calendar behavior. Disabling the calendar removes only the calendar platform after reload; sensor and dashboard data remain unchanged.
+
 ## Install or upgrade
 
 1. Add HACS custom repository `https://github.com/Jocke1970/HA-Fuelio` as an **Integration** and install the latest stable release. Avoid the broken beta.1 tag. Update the stable release through HACS and restart Home Assistant.
@@ -46,11 +52,11 @@ For detailed fields see [analytics schema](docs/analytics-schema.md), [calendar 
 ```yaml
 type: custom:ha-fuelio-card
 entity: sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown
-title: Fuelio · Bilöversikt
+title: Fuelio · Vehicle overview
 
 ```
 
-Mobilkort på en mobil-dashboard:
+Mobile card on a mobile dashboard:
 
 ```yaml
 type: custom:ha-fuelio-mobile-card
@@ -58,21 +64,21 @@ entity: sensor.externa_sensorer_fuelio_vehicle_monthly_cost_breakdown
 title: Caddy
 ```
 
-För mobilkortet behöver `/fuelio/ha-fuelio-mobile-card.js` också läggas till som en separat **JavaScript Module** under dashboardens Resources. Use your **actual** monthly-breakdown entity ID on other installations; do not assume it starts with `sensor.mmk912_`. Both cards stay local/read-only toward Fuelio; the range-calibration controls call only HA-Fuelio's local Home Assistant services and never write to Fuelio or the ZIP. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
+The mobile card also requires `/fuelio/ha-fuelio-mobile-card.js` as a separate **JavaScript Module** under dashboard Resources. Use your **actual** monthly-breakdown entity ID on other installations; do not assume a specific sensor prefix. Both cards stay local/read-only toward Fuelio; the range-calibration controls call only HA-Fuelio's local Home Assistant services and never write to Fuelio or the ZIP. Wider desktop layouts depend on the parent dashboard's available card width; a narrow column cannot be overridden safely from inside the card.
 
 After `/fuelio/ha-fuelio-card.js` has been verified, the old manual copy `/config/www/ha-fuelio-card.js` may be deleted. It is no longer part of the supported update path.
 
 ## Privacy and limitations
 
-Backups may contain registration, VIN, GPS tracks and private notes. No raw backup, identifiable fixtures, coordinates, trip records, notes or secrets should enter this public repository. HA-Fuelio sensors expose aggregates; the local read-only calendar may additionally expose sanitized user-entered cost/trip title, note and category text. GPS coordinates, route/place fields, registration/VIN-like vehicle data and raw source rows remain excluded. Previously registered entity IDs may still embed user-chosen identifying text; beta.9 does not rename them automatically. Backup imports do not backfill HA Recorder.
+Backups may contain registration, VIN, GPS tracks and private notes. No raw backup, identifiable fixtures, coordinates, trip records, notes or secrets should enter this public repository. HA-Fuelio sensors expose aggregates; the local read-only calendar may additionally expose sanitized user-entered cost/trip title, note and category text. GPS coordinates, route/place fields, registration/VIN-like vehicle data and raw source rows remain excluded. Previously registered entity IDs may still embed user-chosen identifying text; HA-Fuelio does not rename them automatically. Backup imports do not backfill HA Recorder.
 
-Not implemented: built-in Google Drive/Dropbox transport, service schedules/reminders, actual per-trip consumption, multiple vehicles in one ZIP, nonmetric exports or stable release. Currency is labelled SEK for the configured profile, not independently verified from the export. Future expenses and refuellings are not booked as current spending.
+Not implemented: built-in Google Drive/Dropbox transport, service schedules/reminders, actual per-trip consumption, multiple vehicles in one ZIP, or nonmetric exports. Currency is labelled SEK for the configured profile, not independently verified from the export. Future expenses and refuellings are not booked as current spending.
 
 ## Test and release status — 2026-09-22
 
-GitHub's synthetic suite passed **33 Python tests plus four frontend tests**, JavaScript syntax and Python compilation for beta.8. A real HA installation confirmed frontend beta.8, **36 registered sensors, zero unknown/unavailable**, the four overview panels, working selected-month categories and trip statistics, and expected booked/estimated arithmetic. These observations do **not** prove exact allocation of driving cost or correctness of all raw records.
+Historical beta validation is retained in the linked documents. Current release validation is enforced by the repository test workflow plus real Home Assistant checks before promotion to `main`.
 
-Remaining checks: compare the per-interval estimates and ODO checkpoints with Fuelio; investigate differences between observed ODO km and the sum of logged trips without forcing them to match; determine desired handling for a paid recurring cost that has `isTemplate=1`; verify the next live ZIP replacement and reload without duplicate entities. The final Jinja-Ninja warning is a **bug in that external report template**: it still prints an alert even when expected and actual counts are both 36. No integration sensor-count error has been observed. See [beta.8 validation](BETA8_VALIDATION.md).
+Known semantic caveats remain documented: ODO and TripDist are intentionally separate measurements, templates are excluded from booked costs, and range estimates depend on available Fuelio history. The historical Jinja-Ninja warning was a **bug in that external report template**. See [beta.8 validation](BETA8_VALIDATION.md) for the archived validation details.
 
 ```bash
 python -m unittest discover -s tests -v

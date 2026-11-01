@@ -26,3 +26,5 @@ jobs:
         run: node tests/test_estimate_frontend.mjs
       - name: Mobile frontend regression
         run: node tests/test_mobile_frontend.mjs
+      - name: English frontend locale regression
+        run: node tests/test_i18n_frontend.mjs

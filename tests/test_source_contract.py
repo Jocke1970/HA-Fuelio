@@ -10,7 +10,7 @@ COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / "fuelio"
 class NamingContractTests(unittest.TestCase):
     def test_config_entry_does_not_use_vehicle_name(self):
         flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
-        self.assertIn('title="Fuelio vehicle"', flow)
+        self.assertIn('title="Fuelio"', flow)
         self.assertNotIn("snapshot.vehicle_name", flow)
 
     def test_entity_ids_remain_stable(self):

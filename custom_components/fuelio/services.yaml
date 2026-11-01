@@ -1,17 +1,17 @@
 calibrate_range:
-  name: Kalibrera räckvidd
-  description: Justera den aktuella tankens teoretiska räckvidd mot bilens färddator utan att skriva till Fuelio.
+  name: Calibrate range
+  description: Adjust the current tank's theoretical range against the vehicle computer without writing to Fuelio.
   fields:
     entity_id:
-      name: Fuelio-entitet
-      description: En entitet från den Fuelio-konfiguration som ska kalibreras.
+      name: Fuelio entity
+      description: An entity from the Fuelio configuration to calibrate.
       required: true
       selector:
         entity:
           integration: fuelio
     range_km:
-      name: Räckvidd
-      description: Aktuell återstående räckvidd enligt bilens färddator.
+      name: Range
+      description: Current remaining range reported by the vehicle computer.
       required: true
       selector:
         number:
@@ -22,12 +22,12 @@ calibrate_range:
           mode: box
 
 clear_range_calibration:
-  name: Återställ räckviddskalibrering
-  description: Ta bort den manuella kalibreringen och återgå till Fuelios automatiska förbrukningsunderlag.
+  name: Clear range calibration
+  description: Remove the manual calibration and return to Fuelio's automatic consumption basis.
   fields:
     entity_id:
-      name: Fuelio-entitet
-      description: En entitet från den Fuelio-konfiguration vars kalibrering ska tas bort.
+      name: Fuelio entity
+      description: An entity from the Fuelio configuration whose calibration should be cleared.
       required: true
       selector:
         entity:

@@ -102,7 +102,7 @@ class FuelioParserTests(unittest.TestCase):
         self.assertEqual(snapshot.vehicle_name, "Fuelio vehicle")
         self.assertNotIn(private_name, repr(snapshot))
         flow_source = (parser_path.parent / "config_flow.py").read_text(encoding="utf-8")
-        self.assertIn('title="Fuelio vehicle"', flow_source)
+        self.assertIn('title="Fuelio"', flow_source)
         self.assertNotIn("snapshot.vehicle_name", flow_source)
 
     def test_consumption_falls_back_to_last_actual_report(self):
