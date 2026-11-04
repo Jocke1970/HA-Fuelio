@@ -104,5 +104,5 @@ states[p + "estimated_range_remaining"].last_updated = "2026-11-01T12:02:00+01:0
 card.hass = { states, entities };
 assert.doesNotMatch(card.shadowRoot.innerHTML, /RESERV/);
 
-assert.match(card.shadowRoot.innerHTML, /2026\.11\.2b1/);
+assert.match(card.shadowRoot.innerHTML, /2026\.11\.2/);
 console.log("PASS: mobile card compact layout, reserve threshold, details and calibration");
