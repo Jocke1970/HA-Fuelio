@@ -129,15 +129,41 @@
       this.shadowRoot.addEventListener("submit", async (event) => {
         if (event.target?.id !== "fuelio-mobile-calibration") return;
         event.preventDefault();
-        const input = event.target.querySelector?.("input[name=range_km]");
-        const rangeKm = Number(input?.value);
-        if (!Number.isFinite(rangeKm) || rangeKm < 1 || rangeKm > 5000) {
+        const fuelRaw = event.target.querySelector?.("input[name=fuel_left_l]")?.value?.trim?.() || "";
+        const rangeRaw = event.target.querySelector?.("input[name=range_km]")?.value?.trim?.() || "";
+        const consumptionRaw = event.target.querySelector?.("input[name=consumption_l_per_100km]")?.value?.trim?.() || "";
+        const fuelLeft = fuelRaw === "" ? null : Number(fuelRaw);
+        const rangeKm = rangeRaw === "" ? null : Number(rangeRaw);
+        const obdConsumption = consumptionRaw === "" ? null : Number(consumptionRaw);
+        if (fuelLeft === null && rangeKm === null) {
+          this._error = "Ange bränsle kvar eller räckvidd.";
+          this._render();
+          return;
+        }
+        if (fuelLeft !== null && (!Number.isFinite(fuelLeft) || fuelLeft < 0 || fuelLeft > 500)) {
+          this._error = "Ange 0–500 L.";
+          this._render();
+          return;
+        }
+        if (rangeKm !== null && (!Number.isFinite(rangeKm) || rangeKm < 1 || rangeKm > 5000)) {
           this._error = "Ange 1–5 000 km.";
           this._render();
           return;
         }
+        if (obdConsumption !== null && (!Number.isFinite(obdConsumption) || obdConsumption <= 0 || obdConsumption > 100)) {
+          this._error = "Ange 0,1–100 L/100 km.";
+          this._render();
+          return;
+        }
         try {
-          await this._callRangeService("calibrate_range", { range_km: rangeKm });
+          if (fuelLeft !== null) {
+            const data = { fuel_left_l: fuelLeft };
+            if (rangeKm !== null) data.range_km = rangeKm;
+            if (obdConsumption !== null) data.consumption_l_per_100km = obdConsumption;
+            await this._callRangeService("calibrate_fuel_left", data);
+          } else {
+            await this._callRangeService("calibrate_range", { range_km: rangeKm });
+          }
           this._error = "";
         } catch (error) {
           this._error = error?.message || "Kalibreringen misslyckades.";
@@ -262,6 +288,7 @@
       const canCalibrate = Number.isFinite(Number(forecast?.fuel_available_since_calibration_l)) &&
         Number.isFinite(Number(forecast?.distance_since_calibration_km));
       const currentRangeInput = Number.isFinite(range) ? Math.max(1, Math.round(range)) : "";
+      const currentFuelInput = Number.isFinite(remaining) ? remaining.toFixed(2) : "";
 
       const km = Number(month?.km);
       const fuel = Number(month?.fuel);
@@ -278,9 +305,11 @@
           <div class="row"><span>Beräknad nästa tankning</span><strong>${esc(date(this._state("estimated_next_fillup_date")?.state))}</strong></div>
           <div class="row"><span>Dagar till teoretiskt tom</span><strong>${esc(decimal(this._value("estimated_days_to_next_fillup"), "d"))}</strong></div>
           <div class="calibration">
-            <p>Kalibrera mot bilens visade återstående räckvidd. Detta påverkar bara HA och återställs automatiskt vid nästa registrerade primärtankning.</p>
+            <p>Kalibrera aktuell tank mot OBD. Bränsle kvar är primärt; räckvidd och snittförbrukning är valfria kontrollvärden.</p>
             <form id="fuelio-mobile-calibration">
-              <input name="range_km" type="number" min="1" max="5000" step="1" value="${esc(currentRangeInput)}" ${canCalibrate ? "" : "disabled"} aria-label="Återstående räckvidd i kilometer">
+              <input name="fuel_left_l" type="number" min="0" max="500" step="0.01" value="${esc(currentFuelInput)}" ${canCalibrate ? "" : "disabled"} aria-label="Bränsle kvar i liter" placeholder="Bränsle kvar (L)">
+              <input name="range_km" type="number" min="1" max="5000" step="1" value="${esc(currentRangeInput)}" ${canCalibrate ? "" : "disabled"} aria-label="Återstående räckvidd i kilometer" placeholder="Räckvidd (km)">
+              <input name="consumption_l_per_100km" type="number" min="0.1" max="100" step="0.01" ${canCalibrate ? "" : "disabled"} aria-label="OBD-snittförbrukning" placeholder="OBD-snitt (L/100 km)">
               <button type="submit" ${canCalibrate ? "" : "disabled"}>Kalibrera</button>
             </form>
             ${manual ? `<button type="button" class="secondary" data-calibration-clear>Återställ automatisk</button>` : ""}
