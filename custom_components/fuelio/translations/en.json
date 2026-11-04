@@ -183,6 +183,28 @@
           "description": "An entity from the Fuelio configuration whose calibration should be cleared."
         }
       }
+    },
+    "calibrate_fuel_left": {
+      "name": "Calibrate fuel left",
+      "description": "Anchor the current tank to an OBD-reported fuel-left value. Range and average consumption can be supplied as optional consistency checks.",
+      "fields": {
+        "entity_id": {
+          "name": "Fuelio entity",
+          "description": "An entity from the Fuelio configuration to calibrate."
+        },
+        "fuel_left_l": {
+          "name": "Fuel left",
+          "description": "Current fuel remaining reported by the vehicle/OBD source."
+        },
+        "range_km": {
+          "name": "Range",
+          "description": "Optional current remaining range reported by the vehicle."
+        },
+        "consumption_l_per_100km": {
+          "name": "OBD average consumption",
+          "description": "Optional current average consumption reported by the vehicle."
+        }
+      }
     }
   }
 }
