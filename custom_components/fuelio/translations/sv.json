@@ -183,6 +183,28 @@
           "description": "En entitet från den Fuelio-konfiguration vars kalibrering ska tas bort."
         }
       }
+    },
+    "calibrate_fuel_left": {
+      "name": "Kalibrera bränsle kvar",
+      "description": "Förankra den aktuella tanken mot ett OBD-värde för kvarvarande bränsle. Räckvidd och snittförbrukning kan anges som valfria kontrollvärden.",
+      "fields": {
+        "entity_id": {
+          "name": "Fuelio-entitet",
+          "description": "En entitet från den Fuelio-konfiguration som ska kalibreras."
+        },
+        "fuel_left_l": {
+          "name": "Bränsle kvar",
+          "description": "Aktuell kvarvarande bränslemängd enligt bilen/OBD-källan."
+        },
+        "range_km": {
+          "name": "Räckvidd",
+          "description": "Valfri aktuell återstående räckvidd enligt bilen."
+        },
+        "consumption_l_per_100km": {
+          "name": "OBD-snittförbrukning",
+          "description": "Valfri aktuell snittförbrukning enligt bilen."
+        }
+      }
     }
   }
 }
