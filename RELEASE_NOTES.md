@@ -1,3 +1,32 @@
+# HA-Fuelio 2026.11.2 ⛽🎯✅
+
+Stable OBD fuel-left calibration release.
+
+- Promote the live-validated `2026.11.2b1` OBD fuel-left calibration to stable.
+- Keep fuel-left as the primary current-tank anchor, with optional range and OBD average-consumption consistency checks.
+- Preserve forward counting from the OBD snapshot using ODO distance and later partial fills.
+- Preserve automatic reset on the next primary full fill-up and the legacy range-only fallback.
+- Keep desktop/mobile English/Swedish calibration UI and all existing sensor/entity IDs unchanged.
+- Include the Contributors acknowledgement in the stable README.
+- No new sensors or source/write-back changes from the validated beta.
+- Complete the release path `dev → beta → main`.
+
+# HA-Fuelio 2026.11.2b1 ⛽🎯
+
+OBD fuel-left calibration for the current tank.
+
+- Add a new `calibrate_fuel_left` Home Assistant service with required `fuel_left_l` and optional `range_km` / `consumption_l_per_100km` inputs.
+- Treat OBD-reported fuel left as the primary current-tank anchor instead of forcing fuel remaining to be derived only from a historical full fill-up.
+- If range and OBD average consumption are both provided, validate that `fuel_left / range × 100` agrees with the OBD consumption within a bounded tolerance before accepting the snapshot.
+- Use OBD consumption when supplied; otherwise infer consumption from fuel-left + range, or fall back to the automatic Fuelio basis when only fuel-left is provided.
+- After calibration, count fuel forward from the OBD snapshot using ODO distance and later recorded partial fills.
+- Clear the fuel-left calibration automatically on the next registered primary full fill-up, matching existing manual-calibration lifecycle semantics.
+- Keep the legacy range-only calibration available when fuel-left is left blank.
+- Add desktop/mobile calibration fields for fuel left, range and OBD average consumption, with English/Swedish UI text.
+- Add regression coverage using a `44.38 L / 789 km / 5.6 L/100 km` OBD snapshot plus forward-counting and inconsistency rejection tests.
+- Preserve all existing sensor/entity IDs and the read-only Fuelio ZIP contract; no new sensors are added.
+- Release flow remains `dev → beta → main`; stable `2026.11.1` stays on `main` pending real-HA beta validation.
+
 # HA-Fuelio 2026.11.1 🌐📅✅
 
 Stable bilingual integration and calendar-options release.

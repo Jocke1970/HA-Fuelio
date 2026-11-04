@@ -1,8 +1,10 @@
 # HA-Fuelio developer documentation
 
-**Current stable release: `2026.11.1` on `main`.** Read the [root README](../README.md) first for current installation, available features and limitations.
+**Current stable release: `2026.11.2` on `main`.** Read the [root README](../README.md) first for current installation, available features and limitations.
 
 ## Current documentation
+
+`2026.11.2` adds OBD fuel-left calibration with optional range/average-consumption consistency checks while retaining legacy range-only calibration.
 
 `2026.11.1` adds English/Swedish Home Assistant translations and an options flow for enabling/disabling the calendar platform (default enabled for existing entries). Repository documentation remains English-only.
 

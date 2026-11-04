@@ -80,12 +80,19 @@ assert.match(html, /→ stabil/);
 
 const form = {
   id: "fuelio-mobile-calibration",
-  querySelector: () => ({ value: "70" }),
+  querySelector: (selector) => {
+    if (selector.includes("fuel_left_l")) return { value: "44.38" };
+    if (selector.includes("range_km")) return { value: "789" };
+    if (selector.includes("consumption_l_per_100km")) return { value: "5.6" };
+    return null;
+  },
 };
 await card.shadowRoot.listeners.submit({ target: form, preventDefault: () => {} });
 assert.equal(calls[0][0], "fuelio");
-assert.equal(calls[0][1], "calibrate_range");
-assert.equal(calls[0][2].range_km, 70);
+assert.equal(calls[0][1], "calibrate_fuel_left");
+assert.equal(calls[0][2].fuel_left_l, 44.38);
+assert.equal(calls[0][2].range_km, 789);
+assert.equal(calls[0][2].consumption_l_per_100km, 5.6);
 
 states[p + "estimated_range_remaining"].state = "80";
 states[p + "estimated_range_remaining"].last_updated = "2026-11-01T12:01:00+01:00";
@@ -97,5 +104,5 @@ states[p + "estimated_range_remaining"].last_updated = "2026-11-01T12:02:00+01:0
 card.hass = { states, entities };
 assert.doesNotMatch(card.shadowRoot.innerHTML, /RESERV/);
 
-assert.match(card.shadowRoot.innerHTML, /2026\.11\.1/);
+assert.match(card.shadowRoot.innerHTML, /2026\.11\.2/);
 console.log("PASS: mobile card compact layout, reserve threshold, details and calibration");

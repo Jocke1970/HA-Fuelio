@@ -1,12 +1,13 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.1` on `main`.** Development is gated `dev → beta → main`; `2026.11.1` is the current stable release after live Home Assistant validation of the bilingual UI, optional calendar configuration and existing dashboard/data flow.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.2` on `main`.** Development is gated `dev → beta → main`; `2026.11.1` is the current stable release after live Home Assistant validation of the bilingual UI, optional calendar configuration and existing dashboard/data flow.
 
-## Features and data contract (2026.11.1)
+## Features and data contract (2026.11.2)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **Bilingual integration UI (English/Swedish):** config flow, options, sensor friendly names, services and both bundled dashboard cards follow the Home Assistant/browser language. Backend aggregate data stays language-neutral where practical.
 - **Optional calendar platform:** the read-only Fuelio calendar is enabled by default for backward compatibility, but can be disabled under the integration's **Configure** options. Changing the option reloads the config entry; sensor entities remain available.
+- **OBD fuel-left calibration:** the current tank can be anchored to a vehicle/OBD-reported remaining-fuel value. Optional range and OBD average-consumption inputs are consistency checks; if both are supplied they must agree within a bounded tolerance. After calibration, HA-Fuelio counts forward using driven ODO distance and recorded partial fills, then clears the manual anchor on the next primary full fill-up. The older range-only calibration remains available as a fallback.
 - **42 sensors**: the existing 36 summaries/analytics sensors plus distance since last fuel-up, estimated fuel remaining, estimated range remaining, estimated days/date to next fuel-up, and last Fuelio app sync. Existing sensor unique IDs and existing HA entity IDs are preserved, including historical entity slugs ending `_logged_km` whose *display names* now correctly describe odometer kilometres. Newly created sensor entity-ID prefixes can differ from older registered entities.
 - The `Monthly cost breakdown` sensor exposes bounded aggregate attributes: `months` (up to 120), `years` (up to 40), `categories_all`, `lifetime_odometer_km`, `estimated_lifetime`, `latest_two_consumption`, `latest_two_consumption_count` and coverage metadata. Period rows include booked fuel/non-fuel costs, purchased litres, observed ODO distance, logged trip km, trip count, mean logged trip length, fill-up count, categories and separately labelled booked/estimated cost metrics. Year rows additionally include average reported consumption/sample count, weighted actual average fuel price and yearly min/max price/consumption values. All-month history may be truncated for HA attribute size; lifetime aggregates are separate.
 - Fuelio can export a realized recurring cost on an impossible month-end date (for example `2026-09-31`). The parser clamps only cost-row day 29-31 overflow to the real last day of that month; other date parsing remains strict.
@@ -92,3 +93,8 @@ node tests/test_mobile_frontend.mjs
 ```
 
 **Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Stable `2026.11.0` was promoted after live Home Assistant validation of the beta.11 layout, including the top status-chip row. Do not promote to `main` based solely on automated tests.
+## Contributors
+
+- **Joachim Eriksson** — project owner, product direction, real Home Assistant validation and release decisions.
+- **ChatGPT (OpenAI)** — implementation support, code review, test design, documentation and release-workflow assistance.
+
