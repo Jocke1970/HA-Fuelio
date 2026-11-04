@@ -40,6 +40,15 @@
   };
 
   const EN_REPLACEMENTS = [
+    ["Kalibrera aktuell tank mot OBD. Bränsle kvar är primärt; räckvidd och snittförbrukning är valfria kontrollvärden.", "Calibrate the current tank against OBD. Fuel left is primary; range and average consumption are optional consistency checks."],
+    ["Bränsle kvar i liter", "Fuel left in litres"],
+    ["Bränsle kvar (L)", "Fuel left (L)"],
+    ["Räckvidd (km)", "Range (km)"],
+    ["OBD-snittförbrukning", "OBD average consumption"],
+    ["OBD-snitt (L/100 km)", "OBD avg (L/100 km)"],
+    ["Ange bränsle kvar eller räckvidd.", "Enter fuel left or range."],
+    ["Ange 0–500 L.", "Enter 0–500 L."],
+    ["Ange 0,1–100 L/100 km.", "Enter 0.1–100 L/100 km."],
     ["Läser Fuelio …", "Loading Fuelio …"], ["RESERV", "RESERVE"], ["Sedan tankning", "Since fuel-up"],
     ["Förbrukning", "Consumption"], ["Aktuell månad", "Current month"], ["Körsträcka", "Distance"],
     ["Bränsle", "Fuel"], ["Övrigt", "Other"], ["Totalt", "Total"], ["Kostnad/km", "Cost/km"],
