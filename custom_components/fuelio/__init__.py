@@ -17,18 +17,23 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_CONSUMPTION_L_PER_100KM,
     ATTR_ENTITY_ID,
+    ATTR_FUEL_LEFT_L,
     ATTR_RANGE_KM,
     CONF_ENABLE_CALENDAR,
     CONF_FILE_PATH,
     DEFAULT_ENABLE_CALENDAR,
     DOMAIN,
+    SERVICE_CALIBRATE_FUEL_LEFT,
     SERVICE_CALIBRATE_RANGE,
     SERVICE_CLEAR_RANGE_CALIBRATION,
 )
 from .parser import (
     FuelioSnapshot,
+    apply_fuel_left_calibration,
     apply_range_calibration,
+    fuel_left_calibration_basis,
     load_snapshot,
     range_calibration_consumption,
 )
@@ -111,6 +116,19 @@ class FuelioCoordinator(DataUpdateCoordinator[FuelioSnapshot]):
             return snapshot
 
         try:
+            if calibration.get("mode") == "fuel_left":
+                return apply_fuel_left_calibration(
+                    snapshot,
+                    calibration["fuel_left_l"],
+                    calibration["consumption_l_per_100km"],
+                    anchor_available_l=calibration["anchor_available_l"],
+                    anchor_distance_km=calibration["anchor_distance_km"],
+                    target_range_km=calibration.get("target_range_km"),
+                    obd_consumption_l_per_100km=calibration.get("obd_consumption_l_per_100km"),
+                    consistency=calibration.get("consistency"),
+                    calibrated_at=calibration.get("calibrated_at"),
+                    today=dt_util.now().date(),
+                )
             return apply_range_calibration(
                 snapshot,
                 calibration["consumption_l_per_100km"],
@@ -154,6 +172,72 @@ class FuelioCoordinator(DataUpdateCoordinator[FuelioSnapshot]):
                 base,
                 consumption,
                 target_range_km=target_range_km,
+                calibrated_at=calibrated_at,
+                today=dt_util.now().date(),
+            )
+        )
+
+    async def async_calibrate_fuel_left(
+        self,
+        fuel_left_l: float,
+        *,
+        target_range_km: float | None = None,
+        obd_consumption_l_per_100km: float | None = None,
+    ) -> None:
+        """Calibrate the current tank from an OBD fuel-left snapshot."""
+        base = self._raw_snapshot or self.data
+        if base is None:
+            raise ValueError("Fuelio data is not available")
+        primary_fillups = base.fuel_forecast.get("primary_fillup_count")
+        primary_marker = base.fuel_forecast.get("latest_primary_fillup_marker")
+        available = base.fuel_forecast.get("fuel_available_since_calibration_l")
+        distance = base.fuel_forecast.get("distance_since_calibration_km")
+        if (
+            not isinstance(primary_fillups, int)
+            or primary_fillups < 1
+            or not isinstance(primary_marker, str)
+            or not primary_marker
+            or available is None
+            or distance is None
+        ):
+            raise ValueError("A primary-tank fill-up is required before calibration")
+
+        consumption, diagnostics = fuel_left_calibration_basis(
+            base,
+            fuel_left_l,
+            target_range_km=target_range_km,
+            obd_consumption_l_per_100km=obd_consumption_l_per_100km,
+        )
+        calibrated_at = dt_util.now().isoformat()
+        self._calibration = {
+            "mode": "fuel_left",
+            "anchor_primary_fillup_count": primary_fillups,
+            "anchor_primary_fillup_marker": primary_marker,
+            "anchor_available_l": float(available),
+            "anchor_distance_km": float(distance),
+            "fuel_left_l": round(float(fuel_left_l), 2),
+            "consumption_l_per_100km": consumption,
+            "target_range_km": (
+                round(float(target_range_km), 1) if target_range_km is not None else None
+            ),
+            "obd_consumption_l_per_100km": (
+                round(float(obd_consumption_l_per_100km), 4)
+                if obd_consumption_l_per_100km is not None else None
+            ),
+            "consistency": diagnostics["consistency"],
+            "calibrated_at": calibrated_at,
+        }
+        await self._calibration_store.async_save(self._calibration)
+        self.async_set_updated_data(
+            apply_fuel_left_calibration(
+                base,
+                fuel_left_l,
+                consumption,
+                anchor_available_l=float(available),
+                anchor_distance_km=float(distance),
+                target_range_km=target_range_km,
+                obd_consumption_l_per_100km=obd_consumption_l_per_100km,
+                consistency=diagnostics["consistency"],
                 calibrated_at=calibrated_at,
                 today=dt_util.now().date(),
             )
@@ -210,6 +294,17 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         except ValueError as exc:
             raise ServiceValidationError(str(exc)) from exc
 
+    async def calibrate_fuel_left(call: ServiceCall) -> None:
+        coordinator = _coordinator_for_entity(hass, call.data[ATTR_ENTITY_ID])
+        try:
+            await coordinator.async_calibrate_fuel_left(
+                call.data[ATTR_FUEL_LEFT_L],
+                target_range_km=call.data.get(ATTR_RANGE_KM),
+                obd_consumption_l_per_100km=call.data.get(ATTR_CONSUMPTION_L_PER_100KM),
+            )
+        except ValueError as exc:
+            raise ServiceValidationError(str(exc)) from exc
+
     async def clear(call: ServiceCall) -> None:
         coordinator = _coordinator_for_entity(hass, call.data[ATTR_ENTITY_ID])
         await coordinator.async_clear_range_calibration()
@@ -221,6 +316,19 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({
             vol.Required(ATTR_ENTITY_ID): cv.entity_id,
             vol.Required(ATTR_RANGE_KM): vol.All(vol.Coerce(float), vol.Range(min=1, max=5000)),
+        }),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CALIBRATE_FUEL_LEFT,
+        calibrate_fuel_left,
+        schema=vol.Schema({
+            vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+            vol.Required(ATTR_FUEL_LEFT_L): vol.All(vol.Coerce(float), vol.Range(min=0, max=500)),
+            vol.Optional(ATTR_RANGE_KM): vol.All(vol.Coerce(float), vol.Range(min=1, max=5000)),
+            vol.Optional(ATTR_CONSUMPTION_L_PER_100KM): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=100)
+            ),
         }),
     )
     hass.services.async_register(

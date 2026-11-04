@@ -20,6 +20,8 @@ spec.loader.exec_module(parser)
 load_snapshot, parse_backup = parser.load_snapshot, parser.parse_backup
 apply_range_calibration = parser.apply_range_calibration
 range_calibration_consumption = parser.range_calibration_consumption
+apply_fuel_left_calibration = parser.apply_fuel_left_calibration
+fuel_left_calibration_basis = parser.fuel_left_calibration_basis
 
 
 def sample_csv(*, metric: bool = True, malformed: bool = False,
@@ -191,6 +193,73 @@ class FuelioParserTests(unittest.TestCase):
             today=date(2026, 9, 22),
         )
         self.assertAlmostEqual(moved_calibrated.estimated_range_remaining_km, 890, places=1)
+
+    def test_obd_fuel_left_snapshot_is_consistent_and_counts_forward(self):
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        consumption, diagnostics = fuel_left_calibration_basis(
+            snapshot,
+            44.38,
+            target_range_km=789,
+            obd_consumption_l_per_100km=5.6,
+        )
+        self.assertAlmostEqual(consumption, 5.6, places=3)
+        self.assertEqual(diagnostics["source"], "obd_consumption")
+        self.assertEqual(diagnostics["consistency"], "consistent")
+        self.assertAlmostEqual(
+            diagnostics["inferred_consumption_l_per_100km"], 44.38 * 100 / 789, places=3
+        )
+
+        calibrated = apply_fuel_left_calibration(
+            snapshot,
+            44.38,
+            consumption,
+            anchor_available_l=snapshot.fuel_forecast["fuel_available_since_calibration_l"],
+            anchor_distance_km=snapshot.fuel_forecast["distance_since_calibration_km"],
+            target_range_km=789,
+            obd_consumption_l_per_100km=5.6,
+            consistency=diagnostics["consistency"],
+            calibrated_at="2026-09-21T12:00:00+02:00",
+            today=date(2026, 9, 21),
+        )
+        self.assertAlmostEqual(calibrated.estimated_fuel_remaining_l, 44.38, places=2)
+        self.assertAlmostEqual(calibrated.estimated_range_remaining_km, 792.5, places=1)
+        self.assertEqual(
+            calibrated.fuel_forecast["consumption_basis_source"],
+            "manual_fuel_left_calibration",
+        )
+        self.assertEqual(calibrated.fuel_forecast["manual_calibration_mode"], "fuel_left")
+        self.assertEqual(calibrated.fuel_forecast["manual_calibration_consistency"], "consistent")
+
+        moved_meta = dict(snapshot.fuel_forecast)
+        moved_meta["distance_since_calibration_km"] += 100
+        moved = parser.replace(snapshot, fuel_forecast=moved_meta)
+        moved_calibrated = apply_fuel_left_calibration(
+            moved,
+            44.38,
+            consumption,
+            anchor_available_l=snapshot.fuel_forecast["fuel_available_since_calibration_l"],
+            anchor_distance_km=snapshot.fuel_forecast["distance_since_calibration_km"],
+            today=date(2026, 9, 22),
+        )
+        self.assertAlmostEqual(moved_calibrated.estimated_fuel_remaining_l, 38.78, places=2)
+
+    def test_fuel_left_and_range_can_define_basis_without_obd_consumption(self):
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        consumption, diagnostics = fuel_left_calibration_basis(
+            snapshot, 44.38, target_range_km=789
+        )
+        self.assertAlmostEqual(consumption, 44.38 * 100 / 789, places=4)
+        self.assertEqual(diagnostics["source"], "fuel_left_and_range")
+
+    def test_inconsistent_obd_snapshot_is_rejected(self):
+        snapshot = parse_backup(forecast_csv(), today=date(2026, 9, 21))
+        with self.assertRaisesRegex(ValueError, "inconsistent"):
+            fuel_left_calibration_basis(
+                snapshot,
+                44.38,
+                target_range_km=789,
+                obd_consumption_l_per_100km=8.0,
+            )
 
     def test_measured_full_to_full_becomes_automatic_range_basis(self):
         csv = forecast_csv().replace(

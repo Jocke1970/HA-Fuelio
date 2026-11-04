@@ -178,6 +178,165 @@ def apply_range_calibration(
     )
 
 
+
+def fuel_left_calibration_basis(
+    snapshot: FuelioSnapshot,
+    fuel_left_l: float,
+    *,
+    target_range_km: float | None = None,
+    obd_consumption_l_per_100km: float | None = None,
+) -> tuple[float, dict]:
+    """Validate an OBD tank snapshot and choose its temporary consumption basis."""
+    meta = snapshot.fuel_forecast
+    capacity_raw = meta.get("tank_capacity_l")
+    if capacity_raw is None:
+        raise ValueError("Fuel tank capacity is unavailable")
+    capacity = Decimal(str(capacity_raw))
+    fuel_left = Decimal(str(fuel_left_l))
+    if not fuel_left.is_finite() or fuel_left < 0 or fuel_left > capacity:
+        raise ValueError("Fuel-left calibration must be between zero and tank capacity")
+
+    range_value: Decimal | None = None
+    inferred: Decimal | None = None
+    if target_range_km is not None:
+        range_value = Decimal(str(target_range_km))
+        if not range_value.is_finite() or range_value <= 0:
+            raise ValueError("Calibration range must be greater than zero")
+        if fuel_left <= 0:
+            raise ValueError("A positive fuel-left value is required with a positive range")
+        inferred = fuel_left * 100 / range_value
+
+    obd: Decimal | None = None
+    if obd_consumption_l_per_100km is not None:
+        obd = Decimal(str(obd_consumption_l_per_100km))
+        if not obd.is_finite() or obd <= 0 or obd > 100:
+            raise ValueError("OBD consumption must be greater than zero and at most 100 L/100 km")
+
+    consistency = "not_checked"
+    difference: float | None = None
+    if inferred is not None and obd is not None:
+        difference_decimal = abs(inferred - obd)
+        difference = round(float(difference_decimal), 3)
+        tolerance = max(Decimal("0.5"), obd * Decimal("0.10"))
+        if difference_decimal > tolerance:
+            raise ValueError(
+                "Fuel-left, range and OBD consumption are inconsistent "
+                f"({float(inferred):.2f} vs {float(obd):.2f} L/100 km)"
+            )
+        consistency = "consistent"
+
+    if obd is not None:
+        consumption = obd
+        source = "obd_consumption"
+    elif inferred is not None:
+        consumption = inferred
+        source = "fuel_left_and_range"
+    else:
+        automatic_raw = meta.get("automatic_consumption_basis_l_per_100km")
+        if automatic_raw is None:
+            automatic_raw = meta.get("consumption_basis_l_per_100km")
+        if automatic_raw is None:
+            raise ValueError("Automatic fuel-consumption basis is unavailable")
+        consumption = Decimal(str(automatic_raw))
+        source = "automatic_consumption"
+        if not consumption.is_finite() or consumption <= 0 or consumption > 100:
+            raise ValueError("Automatic fuel-consumption basis is invalid")
+
+    return round(float(consumption), 4), {
+        "source": source,
+        "consistency": consistency,
+        "inferred_consumption_l_per_100km": (
+            round(float(inferred), 4) if inferred is not None else None
+        ),
+        "obd_consumption_l_per_100km": round(float(obd), 4) if obd is not None else None,
+        "consistency_difference_l_per_100km": difference,
+    }
+
+
+def apply_fuel_left_calibration(
+    snapshot: FuelioSnapshot,
+    fuel_left_l: float,
+    consumption_l_per_100km: float,
+    *,
+    anchor_available_l: float,
+    anchor_distance_km: float,
+    target_range_km: float | None = None,
+    obd_consumption_l_per_100km: float | None = None,
+    consistency: str | None = None,
+    calibrated_at: str | None = None,
+    today: date | None = None,
+) -> FuelioSnapshot:
+    """Apply a persisted OBD fuel-left snapshot and count forward from that anchor."""
+    today = today or date.today()
+    meta = dict(snapshot.fuel_forecast)
+    current_available_raw = meta.get("fuel_available_since_calibration_l")
+    current_distance_raw = meta.get("distance_since_calibration_km")
+    capacity_raw = meta.get("tank_capacity_l")
+    if current_available_raw is None or current_distance_raw is None or capacity_raw is None:
+        raise ValueError("Fuel-left calibration basis is unavailable")
+
+    current_available = Decimal(str(current_available_raw))
+    current_distance = Decimal(str(current_distance_raw))
+    anchor_available = Decimal(str(anchor_available_l))
+    anchor_distance = Decimal(str(anchor_distance_km))
+    capacity = Decimal(str(capacity_raw))
+    fuel_left = Decimal(str(fuel_left_l))
+    consumption = Decimal(str(consumption_l_per_100km))
+    if (
+        capacity <= 0
+        or fuel_left < 0
+        or fuel_left > capacity
+        or consumption <= 0
+        or consumption > 100
+        or current_distance < anchor_distance
+    ):
+        raise ValueError("Fuel-left calibration values are invalid")
+
+    added_fuel = current_available - anchor_available
+    driven_distance = current_distance - anchor_distance
+    remaining = fuel_left + added_fuel - driven_distance * consumption / 100
+    remaining = min(capacity, max(Decimal(0), remaining))
+    remaining_range = remaining / consumption * 100
+
+    average_daily_raw = meta.get("average_daily_distance_30d_km")
+    average_daily = Decimal(str(average_daily_raw)) if average_daily_raw is not None else Decimal(0)
+    days: int | None = None
+    next_date: date | None = None
+    if average_daily > 0:
+        days = ceil(float(remaining_range / average_daily))
+        next_date = today + timedelta(days=days)
+
+    automatic_basis = meta.get("automatic_consumption_basis_l_per_100km")
+    if automatic_basis is None:
+        automatic_basis = meta.get("consumption_basis_l_per_100km")
+    meta.update({
+        "confidence": "manual",
+        "automatic_consumption_basis_l_per_100km": automatic_basis,
+        "consumption_basis_l_per_100km": round(float(consumption), 4),
+        "consumption_basis_source": "manual_fuel_left_calibration",
+        "manual_calibration_active": True,
+        "manual_calibration_mode": "fuel_left",
+        "manual_calibrated_fuel_left_l": round(float(fuel_left), 2),
+        "manual_calibrated_target_range_km": (
+            round(float(target_range_km), 1) if target_range_km is not None else None
+        ),
+        "manual_calibrated_obd_consumption_l_per_100km": (
+            round(float(obd_consumption_l_per_100km), 4)
+            if obd_consumption_l_per_100km is not None else None
+        ),
+        "manual_calibration_consistency": consistency,
+        "manual_calibrated_at": calibrated_at,
+    })
+    return replace(
+        snapshot,
+        estimated_fuel_remaining_l=round(float(remaining), 2),
+        estimated_range_remaining_km=round(float(remaining_range), 1),
+        estimated_days_to_next_fillup=days,
+        estimated_next_fillup_date=next_date,
+        fuel_forecast=meta,
+    )
+
+
 def _number(raw: str, *, default: Decimal | None = None) -> Decimal | None:
     if not raw.strip():
         return default
