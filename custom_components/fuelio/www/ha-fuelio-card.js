@@ -442,15 +442,41 @@ const ENTITY_SLUGS = Object.freeze({
       this.shadowRoot.addEventListener("submit", async (event) => {
         if (event.target?.id !== "fuelio-range-calibration-form") return;
         event.preventDefault();
-        const input = event.target.querySelector?.("#fuelio-range-km");
-        const rangeKm = Number(input?.value);
-        if (!Number.isFinite(rangeKm) || rangeKm <= 0 || rangeKm > 5000) {
+        const fuelRaw = event.target.querySelector?.("#fuelio-fuel-left-l")?.value?.trim?.() || "";
+        const rangeRaw = event.target.querySelector?.("#fuelio-range-km")?.value?.trim?.() || "";
+        const consumptionRaw = event.target.querySelector?.("#fuelio-obd-consumption")?.value?.trim?.() || "";
+        const fuelLeft = fuelRaw === "" ? null : Number(fuelRaw);
+        const rangeKm = rangeRaw === "" ? null : Number(rangeRaw);
+        const obdConsumption = consumptionRaw === "" ? null : Number(consumptionRaw);
+        if (fuelLeft === null && rangeKm === null) {
+          this._rangeError = "Ange bränsle kvar eller räckvidd.";
+          this._render();
+          return;
+        }
+        if (fuelLeft !== null && (!Number.isFinite(fuelLeft) || fuelLeft < 0 || fuelLeft > 500)) {
+          this._rangeError = "Ange bränsle kvar mellan 0 och 500 L.";
+          this._render();
+          return;
+        }
+        if (rangeKm !== null && (!Number.isFinite(rangeKm) || rangeKm <= 0 || rangeKm > 5000)) {
           this._rangeError = "Ange en räckvidd mellan 1 och 5 000 km.";
           this._render();
           return;
         }
+        if (obdConsumption !== null && (!Number.isFinite(obdConsumption) || obdConsumption <= 0 || obdConsumption > 100)) {
+          this._rangeError = "Ange OBD-snitt mellan 0,1 och 100 L/100 km.";
+          this._render();
+          return;
+        }
         try {
-          await this._callRangeService("calibrate_range", { range_km: rangeKm });
+          if (fuelLeft !== null) {
+            const data = { fuel_left_l: fuelLeft };
+            if (rangeKm !== null) data.range_km = rangeKm;
+            if (obdConsumption !== null) data.consumption_l_per_100km = obdConsumption;
+            await this._callRangeService("calibrate_fuel_left", data);
+          } else {
+            await this._callRangeService("calibrate_range", { range_km: rangeKm });
+          }
           this._rangeDialog = false;
           this._rangeError = "";
         } catch (error) {
@@ -916,20 +942,30 @@ const ENTITY_SLUGS = Object.freeze({
     _rangeCalibrationModal(forecast) {
       if (!this._rangeDialog) return "";
       const current = this._value("estimated_range_remaining_km");
+      const currentFuel = this._value("estimated_fuel_remaining_l");
       const manual = forecast?.manual_calibration_active === true;
       const basis = Number(forecast?.consumption_basis_l_per_100km);
       const automatic = Number(forecast?.automatic_consumption_basis_l_per_100km);
-      const inputValue = Number.isFinite(current) ? Math.max(1, Math.round(current)) : "";
+      const rangeInput = Number.isFinite(current) ? Math.max(1, Math.round(current)) : "";
+      const fuelInput = Number.isFinite(currentFuel) ? currentFuel.toFixed(2) : "";
       return `<div class="calibration-backdrop">
         <form id="fuelio-range-calibration-form" class="calibration-modal">
-          <h3>🎯 Kalibrera teoretisk räckvidd</h3>
-          <p>Ange den återstående räckvidd som bilens färddator visar just nu. HA-Fuelio räknar om förbrukningsunderlaget för den aktuella tanken utan att skriva något tillbaka till Fuelio.</p>
+          <h3>🎯 Kalibrera aktuell tank</h3>
+          <p>Ange bilens/OBD-källans aktuella bränslemängd. Räckvidd och snittförbrukning är valfria kontrollvärden. Lämna bränsle kvar tomt om du vill använda den äldre kalibreringen enbart mot räckvidd.</p>
           <div class="calibration-field">
-            <label for="fuelio-range-km">Bilens räckvidd just nu</label>
-            <input id="fuelio-range-km" name="range_km" type="number" min="1" max="5000" step="1" inputmode="numeric" value="${esc(inputValue)}" required>
+            <label for="fuelio-fuel-left-l">Bränsle kvar</label>
+            <input id="fuelio-fuel-left-l" name="fuel_left_l" type="number" min="0" max="500" step="0.01" inputmode="decimal" value="${esc(fuelInput)}">
+          </div>
+          <div class="calibration-field">
+            <label for="fuelio-range-km">Bilens räckvidd just nu <span class="muted">(valfri)</span></label>
+            <input id="fuelio-range-km" name="range_km" type="number" min="1" max="5000" step="1" inputmode="numeric" value="${esc(rangeInput)}">
+          </div>
+          <div class="calibration-field">
+            <label for="fuelio-obd-consumption">OBD-snittförbrukning <span class="muted">(valfri)</span></label>
+            <input id="fuelio-obd-consumption" name="consumption_l_per_100km" type="number" min="0.1" max="100" step="0.01" inputmode="decimal" placeholder="t.ex. 5,6">
           </div>
           <div class="calibration-meta">
-            <span>Nuvarande prognos: <strong>${esc(decimal(current, "km"))}</strong></span>
+            <span>Nuvarande prognos: <strong>${esc(decimal(currentFuel, "L"))} · ${esc(decimal(current, "km"))}</strong></span>
             <span>Aktuellt förbrukningsunderlag: <strong>${esc(decimal(basis, "L/100 km"))}</strong></span>
             ${manual && Number.isFinite(automatic) ? `<span>Automatiskt Fuelio-underlag: <strong>${esc(decimal(automatic, "L/100 km"))}</strong></span>` : ""}
             <span>Kalibreringen släpps automatiskt vid nästa registrerade primärtankning.</span>
