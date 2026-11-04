@@ -20,4 +20,4 @@
 - [Beta.6 test plan](../ANALYTICS_TEST_PLAN.md) and [beta.6 status](beta6-status.md): retained as historical checkpoints; beta.6's logged-trip-distance ratio is superseded by ODO distance in beta.7 and later.
 - [Beta.7 ODO test plan](../ODOMETER_BETA7_TEST_PLAN.md): useful historical algorithm tests, not the current beta.8 checklist.
 
-Only synthetic test fixtures belong in public GitHub. Never commit Fuelio backup files, identifiable screenshots, vehicle identifiers, route data or credentials. Development and publication proceed `dev → beta → main`; do not promote stable until unresolved real-data issues are checked.
+Only synthetic test fixtures belong in public GitHub. Never commit Fuelio backup files, identifiable screenshots, vehicle identifiers, route data or credentials. Development and publication proceed `dev → beta → main`; do not promote stable until unresolved real-data issues are checked. Stable tags/releases are created only after the exact `main` commit has passed the normal test workflow and the manifest, README, developer docs, card versions and first release-notes heading all agree on the stable version.
