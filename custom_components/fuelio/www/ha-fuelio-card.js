@@ -55,6 +55,14 @@ const ENTITY_SLUGS = Object.freeze({
     ? new Intl.DateTimeFormat(UI_LANGUAGE, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T12:00:00Z`))
     : "Okänd månad";
   const EN_REPLACEMENTS = [
+    ["Kalibrera aktuell tank", "Calibrate current tank"],
+    ["Ange bilens/OBD-källans aktuella bränslemängd. Räckvidd och snittförbrukning är valfria kontrollvärden. Lämna bränsle kvar tomt om du vill använda den äldre kalibreringen enbart mot räckvidd.", "Enter the current fuel amount reported by the vehicle/OBD source. Range and average consumption are optional consistency checks. Leave fuel left blank to use the legacy range-only calibration."],
+    ["OBD-snittförbrukning", "OBD average consumption"],
+    ["(valfri)", "(optional)"],
+    ["Ange bränsle kvar eller räckvidd.", "Enter fuel left or range."],
+    ["Ange bränsle kvar mellan 0 och 500 L.", "Enter fuel left between 0 and 500 L."],
+    ["Ange OBD-snitt mellan 0,1 och 100 L/100 km.", "Enter OBD average consumption between 0.1 and 100 L/100 km."],
+    ["Automatiskt Fuelio-underlag", "Automatic Fuelio basis"],
     ["Läser Fuelio …", "Loading Fuelio …"], ["Data tillgänglig", "Data available"], ["Data saknas", "Data unavailable"],
     ["ZIP uppdaterad", "ZIP updated"], ["Senaste resa", "Latest trip"], ["Tank & räckvidd", "Tank & range"],
     ["Bränsle kvar", "Fuel remaining"], ["Teoretisk räckvidd", "Theoretical range"], ["Sedan senaste tankning", "Since last fuel-up"],
