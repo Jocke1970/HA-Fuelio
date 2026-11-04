@@ -1,8 +1,8 @@
 # HA-Fuelio 🚙
 
-Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest test release: `2026.11.2b1` on `beta`; stable remains `2026.11.1` on `main`.** Development is gated `dev → beta → main`; `2026.11.1` is the current stable release after live Home Assistant validation of the bilingual UI, optional calendar configuration and existing dashboard/data flow.
+Fuelio-source-read-only Home Assistant integration for [Fuelio](https://www.fuel.io/). **Latest stable release: `2026.11.2` on `main`.** Development is gated `dev → beta → main`; `2026.11.1` is the current stable release after live Home Assistant validation of the bilingual UI, optional calendar configuration and existing dashboard/data flow.
 
-## Features and data contract (2026.11.2b1)
+## Features and data contract (2026.11.2)
 
 - Imports a **local**, single-vehicle, metric Fuelio sync CSV ZIP (`Vehicle`, `Log`, optional `CostCategories`, `Costs`, `TripLog`) about every five minutes. Read-only: never writes to the ZIP or Fuelio. Built-in Google Drive retrieval is **not implemented**; an external rclone workflow can keep this local ZIP current.
 - **Bilingual integration UI (English/Swedish):** config flow, options, sensor friendly names, services and both bundled dashboard cards follow the Home Assistant/browser language. Backend aggregate data stays language-neutral where practical.
