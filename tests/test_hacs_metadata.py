@@ -81,6 +81,23 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertIn("entry.add_update_listener(_async_reload_entry)", init_text)
         self.assertIn("entry.options.get(CONF_ENABLE_CALENDAR, DEFAULT_ENABLE_CALENDAR)", init_text)
 
+    def test_stable_release_waits_for_main_ci_and_checks_version_contract(self):
+        workflow = (ROOT / ".github" / "workflows" / "stable-release.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_run:", workflow)
+        self.assertIn('workflows: ["Fuelio parser and frontend tests"]', workflow)
+        self.assertIn("branches: [main]", workflow)
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", workflow)
+        self.assertIn("github.event.workflow_run.event == 'push'", workflow)
+        self.assertIn("github.event.workflow_run.head_sha", workflow)
+        self.assertIn("Refuse stale CI results", workflow)
+        self.assertIn("git rev-parse origin/main", workflow)
+        self.assertIn("README active status paragraph", workflow)
+        self.assertIn("docs/README.md", workflow)
+        self.assertIn("desktop card version is not synced", workflow)
+        self.assertIn("mobile card version is not synced", workflow)
+        self.assertIn("first release-notes heading", workflow)
+        self.assertNotIn("on:\n  push:\n    branches: [main]", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
