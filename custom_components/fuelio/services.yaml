@@ -1,3 +1,48 @@
+calibrate_fuel_left:
+  name: Calibrate fuel left
+  description: Anchor the current tank to an OBD-reported fuel-left value. Optional range and consumption values are used to validate or refine the snapshot.
+  fields:
+    entity_id:
+      name: Fuelio entity
+      description: An entity from the Fuelio configuration to calibrate.
+      required: true
+      selector:
+        entity:
+          integration: fuelio
+    fuel_left_l:
+      name: Fuel left
+      description: Current fuel remaining reported by the vehicle/OBD source.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 0.01
+          unit_of_measurement: L
+          mode: box
+    range_km:
+      name: Range
+      description: Optional current remaining range reported by the vehicle.
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 5000
+          step: 1
+          unit_of_measurement: km
+          mode: box
+    consumption_l_per_100km:
+      name: OBD consumption
+      description: Optional current average consumption reported by the vehicle.
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 100
+          step: 0.01
+          unit_of_measurement: L/100 km
+          mode: box
+
 calibrate_range:
   name: Calibrate range
   description: Adjust the current tank's theoretical range against the vehicle computer without writing to Fuelio.
