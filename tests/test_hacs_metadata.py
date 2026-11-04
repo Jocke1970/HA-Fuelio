@@ -40,6 +40,9 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertNotIn("await _async_register_services(hass)", setup_entry_tail)
         services = (component / "services.yaml").read_text(encoding="utf-8")
         self.assertIn("calibrate_range:", services)
+        self.assertIn("calibrate_fuel_left:", services)
+        self.assertIn("fuel_left_l:", services)
+        self.assertIn("consumption_l_per_100km:", services)
         self.assertIn("clear_range_calibration:", services)
 
     def test_bilingual_translation_contract(self):
@@ -59,6 +62,7 @@ class HacsMetadataTests(unittest.TestCase):
         self.assertIn("enable_calendar", en["options"]["step"]["init"]["data"])
         self.assertIn("services", en)
         self.assertIn("calibrate_range", en["services"])
+        self.assertIn("calibrate_fuel_left", en["services"])
         self.assertEqual(len(en["entity"]["sensor"]), 42)
 
         sensor_text = (component / "sensor.py").read_text(encoding="utf-8")
