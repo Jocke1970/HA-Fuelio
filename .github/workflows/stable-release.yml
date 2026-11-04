@@ -1,7 +1,9 @@
 name: Publish stable release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Fuelio parser and frontend tests"]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -9,52 +11,104 @@ permissions:
 
 jobs:
   release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the exact main commit that passed CI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Compile integration and tests
-        run: python -m compileall -q custom_components tests
-      - name: Run parser and HACS metadata regression tests
-        run: python -m unittest discover -s tests -v
-      - name: Check desktop frontend syntax
-        run: node --check custom_components/fuelio/www/ha-fuelio-card.js
-      - name: Check mobile frontend syntax
-        run: node --check custom_components/fuelio/www/ha-fuelio-mobile-card.js
-      - name: Run English frontend locale regression
-        run: node tests/test_i18n_frontend.mjs
-      - name: Check stable version, HACS metadata and matching release notes
+
+      - name: Refuse stale CI results
+        id: freshness
+        shell: bash
+        run: |
+          git fetch origin main
+          tested_sha="${{ github.event.workflow_run.head_sha }}"
+          current_main="$(git rev-parse origin/main)"
+          if [[ "$tested_sha" != "$current_main" ]]; then
+            echo "Skipping stable release: CI passed for $tested_sha but main is now $current_main"
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+      - name: Validate stable release contract
+        if: steps.freshness.outputs.ready == 'true'
         id: version
         shell: bash
         run: |
-          version="$(python -c 'import json; print(json.load(open("custom_components/fuelio/manifest.json"))["version"])')"
-          if [[ ! "$version" =~ ^[0-9]{4}\.(0[1-9]|1[0-2])\.[0-9]+$ ]]; then
-            echo "Skipping stable release: manifest version is $version"
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           python - <<'PY'
           import json
+          import re
           from pathlib import Path
-          hacs = json.loads(Path('hacs.json').read_text(encoding='utf-8'))
-          manifest = json.loads(Path('custom_components/fuelio/manifest.json').read_text(encoding='utf-8'))
-          assert isinstance(hacs, dict) and hacs.get('name') == 'Fuelio', 'Invalid HACS metadata'
-          assert manifest['domain'] == 'fuelio', 'Invalid integration manifest'
+
+          manifest = json.loads(Path("custom_components/fuelio/manifest.json").read_text(encoding="utf-8"))
+          version = manifest["version"]
+
+          if not re.fullmatch(r"\d{4}\.(0[1-9]|1[0-2])\.\d+", version):
+              raise SystemExit(f"Stable release blocked: manifest version {version!r} is not a stable version")
+
+          if manifest.get("domain") != "fuelio":
+              raise SystemExit("Stable release blocked: invalid integration domain")
+
+          hacs = json.loads(Path("hacs.json").read_text(encoding="utf-8"))
+          if hacs.get("name") != "Fuelio":
+              raise SystemExit("Stable release blocked: invalid HACS metadata")
+
+          readme = Path("README.md").read_text(encoding="utf-8")
+          active = next(
+              (paragraph for paragraph in readme.split("\n\n") if "Latest stable release:" in paragraph),
+              "",
+          )
+          expected_latest = f"Latest stable release: `{version}` on `main`."
+          expected_current = f"`{version}` is the current stable release"
+          if expected_latest not in active or expected_current not in active:
+              raise SystemExit(
+                  "Stable release blocked: README active status paragraph does not consistently "
+                  f"identify {version} as current stable"
+              )
+
+          docs = Path("docs/README.md").read_text(encoding="utf-8")
+          if f"Current stable release: `{version}` on `main`." not in docs:
+              raise SystemExit(
+                  f"Stable release blocked: docs/README.md does not identify {version} as current stable"
+              )
+
+          notes = Path("RELEASE_NOTES.md").read_text(encoding="utf-8")
+          first_heading = next((line for line in notes.splitlines() if line.startswith("# ")), "")
+          if first_heading != f"# HA-Fuelio {version} " and not first_heading.startswith(f"# HA-Fuelio {version} "):
+              raise SystemExit(
+                  f"Stable release blocked: first release-notes heading is {first_heading!r}, expected {version}"
+              )
+
+          desktop = Path("custom_components/fuelio/www/ha-fuelio-card.js").read_text(encoding="utf-8")
+          mobile = Path("custom_components/fuelio/www/ha-fuelio-mobile-card.js").read_text(encoding="utf-8")
+          if f'CARD_VERSION = "{version}"' not in desktop:
+              raise SystemExit("Stable release blocked: desktop card version is not synced")
+          if f'CARD_VERSION = "{version}"' not in mobile:
+              raise SystemExit("Stable release blocked: mobile card version is not synced")
+
+          print(version)
+          Path("/tmp/fuelio_stable_version").write_text(version, encoding="utf-8")
           PY
-          if ! grep -Fq "$version" RELEASE_NOTES.md; then
-            echo "Skipping stable release: release notes do not describe $version"
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+
+          version="$(cat /tmp/fuelio_stable_version)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub stable release once
-        if: steps.version.outputs.ready == 'true'
+        if: steps.freshness.outputs.ready == 'true' && steps.version.outputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
         shell: bash
         run: |
           tag="$RELEASE_VERSION"
@@ -62,5 +116,5 @@ jobs:
             echo "Release $tag already exists; not overwriting."
             exit 0
           fi
-          gh release create "$tag" --target "$GITHUB_SHA" \
+          gh release create "$tag" --target "$RELEASE_SHA" \
             --title "HA-Fuelio $tag" --notes-file RELEASE_NOTES.md

@@ -92,7 +92,7 @@ node tests/test_estimate_frontend.mjs
 node tests/test_mobile_frontend.mjs
 ```
 
-**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Stable `2026.11.0` was promoted after live Home Assistant validation of the beta.11 layout, including the top status-chip row. Do not promote to `main` based solely on automated tests.
+**Release gate:** changes go to `dev` first, then `beta` for real-HA validation. Before promotion, the stable version, root README status, developer-doc status, bundled card versions and the first release-notes heading must already agree. After the `beta → main` merge, the normal `main` test workflow must pass; only then may the stable-release workflow tag and publish that exact tested `main` commit. A stale CI result is rejected if `main` has moved meanwhile. Do not promote to `main` based solely on automated tests.
 ## Contributors
 
 - **Joachim Eriksson** — project owner, product direction, real Home Assistant validation and release decisions.
