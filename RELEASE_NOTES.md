@@ -1,3 +1,16 @@
+# HA-Fuelio 2026.11.2 ⛽🎯✅
+
+Stable OBD fuel-left calibration release.
+
+- Promote the live-validated `2026.11.2b1` OBD fuel-left calibration to stable.
+- Keep fuel-left as the primary current-tank anchor, with optional range and OBD average-consumption consistency checks.
+- Preserve forward counting from the OBD snapshot using ODO distance and later partial fills.
+- Preserve automatic reset on the next primary full fill-up and the legacy range-only fallback.
+- Keep desktop/mobile English/Swedish calibration UI and all existing sensor/entity IDs unchanged.
+- Include the Contributors acknowledgement in the stable README.
+- No new sensors or source/write-back changes from the validated beta.
+- Complete the release path `dev → beta → main`.
+
 # HA-Fuelio 2026.11.2b1 ⛽🎯
 
 OBD fuel-left calibration for the current tank.
