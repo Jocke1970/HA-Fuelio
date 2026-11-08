@@ -145,14 +145,22 @@ const ENTITY_SLUGS = Object.freeze({
     .overview { display:grid; grid-template-columns:1fr; gap:12px; }
     .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
     .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
-    .overview-expander { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
-    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:14px 15px; display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px; text-align:left; font:inherit; cursor:pointer; }
+    .overview-summary-grid { display:grid; grid-template-columns:1fr; gap:12px; min-width:0; }
+    .overview-expander { position:relative; border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
+    .overview-expander.is-open { grid-column:1 / -1; }
+    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:16px 34px 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; font:inherit; cursor:pointer; min-height:126px; }
+    .overview-expander.is-open>button { min-height:auto; padding-bottom:12px; }
     .overview-expander>button:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
-    .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; }
-    .overview-summary { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:4px 10px; color:var(--secondary-text-color,#68727d); font-size:.7rem; text-align:right; }
-    .overview-summary strong { color:var(--primary-text-color,#202124); font-size:.78rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
-    .overview-chevron { font-weight:800; }
-    .overview-expander-body { padding:0 15px 12px; }
+    .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; text-align:center; }
+    .overview-summary { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; color:var(--secondary-text-color,#68727d); text-align:center; }
+    .overview-summary>span { min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; }
+    .overview-summary-label { font-size:.68rem; line-height:1.2; }
+    .overview-summary strong { display:block; color:var(--primary-text-color,#202124); font-size:.96rem; line-height:1.2; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .overview-chevron { position:absolute; top:13px; right:15px; font-weight:800; color:var(--secondary-text-color,#68727d); }
+    .overview-expander-body { padding:0 15px 14px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
+    .overview-expander .overview-row { flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:4px; }
+    .overview-expander .overview-row .note { text-align:center; }
+    .overview-expander .overview-row strong { text-align:center; }
     .overview-row { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 10px; padding:8px 0; border-top:1px solid var(--divider-color,#e2e4e8); }
     .overview-row:first-of-type { border-top:0; }
     .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.75rem; }
@@ -243,8 +251,9 @@ const ENTITY_SLUGS = Object.freeze({
     @container (min-width:720px) {
       .shell { padding:22px; }
       .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }
-      .overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .overview { grid-template-columns:1fr; }
       .range-panel { grid-column:1 / -1; }
+      .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
       .annual-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
       .records-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
@@ -252,8 +261,9 @@ const ENTITY_SLUGS = Object.freeze({
     @container (min-width:1050px) {
       .shell { padding:24px; }
       .kpi-strip { grid-template-columns:repeat(6,minmax(0,1fr)); }
-      .overview { grid-template-columns:repeat(4,minmax(0,1fr)); }
-      .range-panel { grid-column:span 2; }
+      .overview { grid-template-columns:1fr; }
+      .range-panel { grid-column:1 / -1; }
+      .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .dashboard-grid { grid-template-columns:minmax(0,1.6fr) minmax(340px,.9fr); align-items:start; }
       .section-costs { grid-row:span 2; }
       .section-annual,.section-tripstats,.section-records,.section-service,.section-version { grid-column:1 / -1; }
@@ -261,9 +271,10 @@ const ENTITY_SLUGS = Object.freeze({
       .section-costs .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     }
     @container (min-width:1380px) {
-      .overview { grid-template-columns:repeat(6,minmax(0,1fr)); }
+      .overview { grid-template-columns:1fr; }
       .overview-panel { grid-column:span 1; }
-      .range-panel { grid-column:span 2; }
+      .range-panel { grid-column:1 / -1; }
+      .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .dashboard-grid { grid-template-columns:minmax(0,1.75fr) minmax(400px,.85fr); }
       .annual-grid { grid-template-columns:repeat(6,minmax(0,1fr)); }
       .annual-columns { grid-template-columns:1.15fr .85fr; gap:18px; }
@@ -934,10 +945,10 @@ const ENTITY_SLUGS = Object.freeze({
     }
     _overviewExpander(id, icon, title, summaries, rows) {
       const open = this._overviewOpen[id] === true;
-      const summary = summaries.map(([label, value]) => `<span>${esc(label)} <strong>${esc(value)}</strong></span>`).join("");
+      const summary = summaries.map(([label, value]) => `<span><span class="overview-summary-label">${esc(label)}</span><strong>${esc(value)}</strong></span>`).join("");
       const body = rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("");
-      return `<section class="overview-expander"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-summary">${summary}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body">${body}</div>` : ""}</section>`;
+      return `<section class="overview-expander${open ? " is-open" : ""}"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-summary">${summary}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body">${body}</div>` : ""}</section>`;
     }
     _rangeServiceEntity() {
       return this._resolveId("estimated_range_remaining_km") || this._config?.entity || null;
@@ -1083,6 +1094,7 @@ const ENTITY_SLUGS = Object.freeze({
       </div>`;
       const overview = `<div class="overview">
         ${this._rangePanel(forecast)}
+        <div class="overview-summary-grid">
         ${this._overviewExpander("odometer", "🛣️", "Mätarställning", [
           ["Aktuell", decimal(this._value("latest_odometer_km"), "km")],
           ["Månad", decimal(nowMonth?.km, "km")]
@@ -1117,6 +1129,7 @@ const ENTITY_SLUGS = Object.freeze({
           ["Beräknat bränsle · månad", kroner(nowMonth?.estimated_fuel)],
           ["Beräknat bränsle · år", kroner(currentYearData?.estimated_fuel)]
         ])}
+        </div>
       </div>`;
       const annual = `<label class="select-label" for="fuelio-year">Visa år</label>
       <select id="fuelio-year" ${allYears.length ? "" : "disabled"}>${allYears.map((row) => `<option value="${esc(String(row.year))}" ${String(row.year) === this._year ? "selected" : ""}>${esc(String(row.year))}</option>`).join("")}</select>
