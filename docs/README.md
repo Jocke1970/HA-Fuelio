@@ -1,8 +1,10 @@
 # HA-Fuelio developer documentation
 
-**Current stable release: `2026.11.2` on `main`.** Read the [root README](../README.md) first for current installation, available features and limitations.
+**Current development candidate: `2026.11.3b1` on `dev`; stable `2026.11.2` remains on `main`.** Read the [root README](../README.md) first for current installation, available features and limitations.
 
 ## Current documentation
+
+`2026.11.3b1` redesigns the four compact overview expanders as centered 2×2 summary cards on desktop; an opened card spans the full summary-grid width and mobile remains single-column.
 
 `2026.11.2` adds OBD fuel-left calibration with optional range/average-consumption consistency checks while retaining legacy range-only calibration.
 
