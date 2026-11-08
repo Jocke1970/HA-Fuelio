@@ -1,3 +1,18 @@
+# HA-Fuelio 2026.11.3b1 🧩📐
+
+Centered 2×2 overview summary cards.
+
+- Redesign the four compact overview expanders — Odometer, Fuel, Booked expenses and Estimated driving cost/km — as a centered 2×2 card grid on desktop.
+- Keep two equally weighted key values visible in every collapsed card beneath a centered title.
+- Make the whole card clickable and keep the chevron unobtrusive in the top-right corner.
+- Expand an opened overview card across the full two-column summary-grid width.
+- Keep detailed rows centered inside the opened card.
+- Fall back to a single-column summary grid on narrow layouts.
+- Keep Tank & range first and full-width above the four summary cards.
+- Preserve all existing calculations, entities, expand/collapse state and backend behavior; this release is frontend layout only.
+- Sync desktop/mobile card versions and documentation to `2026.11.3b1`.
+- Release flow remains `dev → beta → main`; stable `2026.11.2` stays on `main` pending real-HA visual validation.
+
 # HA-Fuelio 2026.11.2 ⛽🎯✅
 
 Stable OBD fuel-left calibration release.
