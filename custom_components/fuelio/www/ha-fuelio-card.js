@@ -1,8 +1,8 @@
-/* HA-Fuelio Card 2026.11.3b1 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.3b2 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
   const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
-  const CARD_VERSION = "2026.11.3b1";
+  const CARD_VERSION = "2026.11.3b2";
   const fmt = new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat(UI_LANGUAGE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -132,10 +132,10 @@ const ENTITY_SLUGS = Object.freeze({
     .pill-trip { background:color-mix(in srgb,var(--secondary-background-color,#eef1f4) 72%,var(--card-background-color,#fff) 28%); color:var(--secondary-text-color,#68727d); }
     .pill-trip strong { color:var(--primary-text-color,#202124); }
     .kpi-strip { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
-    .kpi { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:13px 14px; background:linear-gradient(180deg,color-mix(in srgb,var(--card-background-color,#fff) 96%,var(--primary-color,#03a9f4) 4%),var(--card-background-color,#fff)); }
-    .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; }
-    .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-    .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; }
+    .kpi { min-width:0; border:1px solid var(--divider-color,#e2e4e8); border-radius:18px; padding:13px 14px; background:linear-gradient(180deg,color-mix(in srgb,var(--card-background-color,#fff) 96%,var(--primary-color,#03a9f4) 4%),var(--card-background-color,#fff)); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .kpi .label { color:var(--secondary-text-color,#68727d); font-size:.7rem; font-weight:700; margin-bottom:5px; text-align:center; }
+    .kpi .value { font-size:1.18rem; font-weight:850; line-height:1.15; letter-spacing:-.02em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; text-align:center; }
+    .kpi .detail { color:var(--secondary-text-color,#68727d); font-size:.68rem; margin-top:5px; text-align:center; }
     button.kpi,button.tile { appearance:none; color:inherit; font:inherit; width:100%; }
     button.tile { background:var(--card-background-color,#fff); }
     .chart-action { cursor:pointer; position:relative; transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease; }
@@ -248,6 +248,9 @@ const ENTITY_SLUGS = Object.freeze({
     .calibration-buttons { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:16px; }
     .calibration-buttons button { appearance:none; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:9px 12px; background:var(--secondary-background-color,#f4f5f7); color:inherit; font:inherit; font-weight:800; cursor:pointer; }
     .calibration-buttons .primary { border-color:var(--primary-color,#03a9f4); background:var(--primary-color,#03a9f4); color:var(--text-primary-color,#fff); }
+    @container (min-width:430px) {
+      .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
     @container (min-width:720px) {
       .shell { padding:22px; }
       .kpi-strip { grid-template-columns:repeat(3,minmax(0,1fr)); }

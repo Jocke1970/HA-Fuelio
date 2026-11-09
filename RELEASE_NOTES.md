@@ -1,3 +1,15 @@
+# HA-Fuelio 2026.11.3b2 📐✨
+
+Responsive 2×2 overview polish.
+
+- Lower the four-card overview breakpoint to 430 px so normal dashboard columns render the intended 2×2 grid instead of falling back to a 1×4 stack.
+- Keep true narrow/mobile layouts single-column.
+- Center label, primary value and detail text in the six KPI tiles at the top of the desktop dashboard.
+- Preserve the centered summary-card titles, paired key values, full-width expansion behavior and existing calculations.
+- No backend, entity, data-model or calibration changes.
+- Sync manifest, desktop/mobile card versions and documentation to `2026.11.3b2`.
+- Release flow remains `dev → beta → main`; stable `2026.11.2` stays on `main` pending real-HA visual validation.
+
 # HA-Fuelio 2026.11.3b1 🧩📐
 
 Centered 2×2 overview summary cards.
