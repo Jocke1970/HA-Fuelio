@@ -1,8 +1,8 @@
-/* HA-Fuelio Card 2026.11.3b2 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.3b3 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
   const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
-  const CARD_VERSION = "2026.11.3b2";
+  const CARD_VERSION = "2026.11.3b3";
   const fmt = new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat(UI_LANGUAGE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -154,13 +154,14 @@ const ENTITY_SLUGS = Object.freeze({
     .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; text-align:center; }
     .overview-summary { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; color:var(--secondary-text-color,#68727d); text-align:center; }
     .overview-summary>span { min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; }
-    .overview-summary-label { font-size:.68rem; line-height:1.2; }
+    .overview-summary-label { font-size:.68rem; line-height:1.2; text-align:center; }
     .overview-summary strong { display:block; color:var(--primary-text-color,#202124); font-size:.96rem; line-height:1.2; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
     .overview-chevron { position:absolute; top:13px; right:15px; font-weight:800; color:var(--secondary-text-color,#68727d); }
     .overview-expander-body { padding:0 15px 14px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
     .overview-expander .overview-row { flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:4px; }
     .overview-expander .overview-row .note { text-align:center; }
     .overview-expander .overview-row strong { text-align:center; }
+    .overview-expander .overview-row .name { text-align:center; }
     .overview-row { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 10px; padding:8px 0; border-top:1px solid var(--divider-color,#e2e4e8); }
     .overview-row:first-of-type { border-top:0; }
     .overview-row .name { color:var(--secondary-text-color,#68727d); font-size:.75rem; }
@@ -174,7 +175,7 @@ const ENTITY_SLUGS = Object.freeze({
     .range-calibrate:disabled { cursor:not-allowed; opacity:.45; }
     .range-manual-note { padding:9px 11px; border-radius:12px; background:color-mix(in srgb,var(--card-background-color,#fff) 90%,var(--primary-color,#03a9f4) 10%); color:var(--secondary-text-color,#68727d); font-size:.7rem; line-height:1.4; }
     .range-main { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-    .range-stat { min-width:0; padding:11px 12px; border-radius:15px; background:var(--secondary-background-color,#f4f5f7); }
+    .range-stat { min-width:0; padding:11px 12px; border-radius:15px; background:var(--secondary-background-color,#f4f5f7); text-align:center; }
     .range-stat span { display:block; color:var(--secondary-text-color,#68727d); font-size:.69rem; margin-bottom:4px; }
     .range-stat strong { display:block; font-size:1.08rem; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
     .fuel-meter { height:10px; border-radius:999px; background:var(--secondary-background-color,#e8ebef); overflow:hidden; }
@@ -248,7 +249,7 @@ const ENTITY_SLUGS = Object.freeze({
     .calibration-buttons { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:16px; }
     .calibration-buttons button { appearance:none; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:9px 12px; background:var(--secondary-background-color,#f4f5f7); color:inherit; font:inherit; font-weight:800; cursor:pointer; }
     .calibration-buttons .primary { border-color:var(--primary-color,#03a9f4); background:var(--primary-color,#03a9f4); color:var(--text-primary-color,#fff); }
-    @container (min-width:430px) {
+    @container (min-width:340px) {
       .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
     @container (min-width:720px) {
