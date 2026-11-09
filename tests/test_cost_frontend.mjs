@@ -52,7 +52,7 @@ assert.match(html, /15 km/);
 assert.match(html, /70,00 kr/);
 assert.match(html, /47,5 L/);
 assert.match(html, /1\s?200,00 kr/);
-assert.match(html, /Beräknad körkostnad\/km/);
+assert.match(html, /Körkostnad/);
 assert.match(html, /Bokförda utgifter per avläst ODO-kilometer/);
 assert.match(html, /Delperiod: 2026-09-05/);
 assert.match(html, /Årsöversikt/);
