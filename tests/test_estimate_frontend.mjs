@@ -53,7 +53,7 @@ assert.match(overview(before), /Mätarställning/);
 assert.match(overview(before), /data-overview-section="odometer"/);
 assert.match(overview(before), /Drivmedel/);
 assert.match(overview(before), /Bokförda utgifter/);
-assert.match(overview(before), /Beräknad körkostnad\/km/);
+assert.match(overview(before), /Körkostnad/);
 assert.match(overview(before), /Tank & räckvidd/);
 assert.ok(overview(before).indexOf("Tank & räckvidd") < overview(before).indexOf("Mätarställning"), "Tank & räckvidd must render before Mätarställning");
 assert.match(overview(before), /data-overview-section="fuel"/);
@@ -61,7 +61,14 @@ assert.match(overview(before), /data-overview-section="booked"/);
 assert.match(overview(before), /data-overview-section="drivecost"/);
 assert.match(overview(before), /overview-summary-grid/);
 assert.match(overview(before), /overview-summary-label/);
-assert.match(before, /@container \(min-width:430px\) \{\s*\.overview-summary-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+assert.match(overview(before), /overview-summary-unit/);
+assert.match(source, /wholeKroner\(nowMonth\?\.total\)/);
+assert.match(source, /wholeKroner\(currentYearData\?\.total\)/);
+
+
+
+
+assert.match(before, /@container \(min-width:340px\) \{\s*\.overview-summary-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 assert.match(before, /\.overview-expander>button \{[^}]*text-align:center/);
 assert.match(before, /\.kpi \{[^}]*text-align:center[^}]*align-items:center/);
 assert.match(overview(before), /aria-expanded="false"/);
