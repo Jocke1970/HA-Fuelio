@@ -1,3 +1,21 @@
+# HA-Fuelio 2026.11.3b4 🚗📐
+
+Compact overview formatting polish, following the 3b3 2×2 layout fix.
+
+- Keep odometer values on one line with `km` centered underneath in the four-card overview.
+- Keep fuel-consumption numbers on one line with `L/100 km` centered underneath.
+- Show whole SEK (no öre) for the collapsed **Booked expenses** monthly and yearly values; preserve precise amounts in the detailed sections and underlying data.
+- Shorten the fourth overview heading to **Körkostnad** / **Driving cost** while retaining `kr/km` with the values.
+- Tighten summary typography and horizontal padding for normal HA card widths.
+- Keep calculations, all entities, tank/range calibration and mobile card unchanged.
+- Tested source expectations updated; `main` remains stable at `2026.11.2` pending live HA visual validation.
+
+# HA-Fuelio 2026.11.3b3 🧩
+
+- Lower the overview 2×2 card-grid breakpoint from 430 px to 340 px to fit standard Home Assistant columns.
+- Center overview row labels and Tank & range stat content.
+- Preserve existing data, calculations and all entity IDs.
+
 # HA-Fuelio 2026.11.3b2 📐✨
 
 Responsive 2×2 overview polish.
