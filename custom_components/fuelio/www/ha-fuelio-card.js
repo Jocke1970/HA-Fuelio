@@ -1,8 +1,8 @@
-/* HA-Fuelio Card 2026.11.3b3 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.3b4 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
   const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
-  const CARD_VERSION = "2026.11.3b3";
+  const CARD_VERSION = "2026.11.3b4";
   const fmt = new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 2 });
   const money = new Intl.NumberFormat(UI_LANGUAGE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Home Assistant derives entity IDs from display names, NOT description.key.
@@ -43,6 +43,7 @@ const ENTITY_SLUGS = Object.freeze({
   const num = (state) => valid(state) && Number.isFinite(Number(state.state)) ? Number(state.state) : null;
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const kroner = (value) => Number.isFinite(value) ? `${money.format(value)} kr` : "—";
+  const wholeKroner = (value) => Number.isFinite(value) ? `${new Intl.NumberFormat(UI_LANGUAGE, { maximumFractionDigits: 0 }).format(value)} kr` : "—";
   const decimal = (value, unit = "") => Number.isFinite(value) ? `${fmt.format(value)}${unit ? ` ${unit}` : ""}` : "—";
   const date = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "—";
   const dateTime = (value) => {
@@ -68,7 +69,7 @@ const ENTITY_SLUGS = Object.freeze({
     ["Bränsle kvar", "Fuel remaining"], ["Teoretisk räckvidd", "Theoretical range"], ["Sedan senaste tankning", "Since last fuel-up"],
     ["Nästa tankning", "Next fuel-up"], ["Tillfälligt förbrukningsunderlag", "Temporary consumption basis"],
     ["Mätarställning", "Odometer"], ["Drivmedel", "Fuel"], ["Bokförda utgifter", "Booked expenses"],
-    ["Beräknad körkostnad/km", "Estimated driving cost/km"], ["Aktuell", "Current"], ["Denna månad", "This month"],
+    ["Körkostnad", "Driving cost"], ["Aktuell", "Current"], ["Denna månad", "This month"],
     ["Innevarande år", "Current year"], ["Sedan importstart", "Since import start"], ["Löpande snitt", "Running average"],
     ["Tankat denna månad", "Fuelled this month"], ["Tankat i år", "Fuelled this year"], ["Bränsle · månad", "Fuel · month"],
     ["Övrigt · månad", "Other · month"], ["Bränsle · år", "Fuel · year"], ["Övrigt · år", "Other · year"],
@@ -148,14 +149,15 @@ const ENTITY_SLUGS = Object.freeze({
     .overview-summary-grid { display:grid; grid-template-columns:1fr; gap:12px; min-width:0; }
     .overview-expander { position:relative; border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
     .overview-expander.is-open { grid-column:1 / -1; }
-    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:16px 34px 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; font:inherit; cursor:pointer; min-height:126px; }
+    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:16px 10px 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; font:inherit; cursor:pointer; min-height:126px; }
     .overview-expander.is-open>button { min-height:auto; padding-bottom:12px; }
     .overview-expander>button:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
     .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; text-align:center; }
     .overview-summary { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; color:var(--secondary-text-color,#68727d); text-align:center; }
     .overview-summary>span { min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; }
     .overview-summary-label { font-size:.68rem; line-height:1.2; text-align:center; }
-    .overview-summary strong { display:block; color:var(--primary-text-color,#202124); font-size:.96rem; line-height:1.2; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .overview-summary strong { display:block; color:var(--primary-text-color,#202124); font-size:.86rem; line-height:1.2; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .overview-summary-unit { display:block; color:var(--secondary-text-color,#68727d); font-size:.68rem; line-height:1.2; white-space:nowrap; text-align:center; }
     .overview-chevron { position:absolute; top:13px; right:15px; font-weight:800; color:var(--secondary-text-color,#68727d); }
     .overview-expander-body { padding:0 15px 14px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
     .overview-expander .overview-row { flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:4px; }
@@ -949,7 +951,12 @@ const ENTITY_SLUGS = Object.freeze({
     }
     _overviewExpander(id, icon, title, summaries, rows) {
       const open = this._overviewOpen[id] === true;
-      const summary = summaries.map(([label, value]) => `<span><span class="overview-summary-label">${esc(label)}</span><strong>${esc(value)}</strong></span>`).join("");
+      const summary = summaries.map(([label, value]) => {
+        const unit = id === "odometer" ? "km" : id === "fuel" ? "L/100 km" : null;
+        const splitUnit = unit && value.endsWith(` ${unit}`);
+        const number = splitUnit ? value.slice(0, -unit.length - 1) : value;
+        return `<span><span class="overview-summary-label">${esc(label)}</span><strong>${esc(number)}</strong>${splitUnit ? `<span class="overview-summary-unit">${esc(unit)}</span>` : ""}</span>`;
+      }).join("");
       const body = rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("");
       return `<section class="overview-expander${open ? " is-open" : ""}"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-summary">${summary}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body">${body}</div>` : ""}</section>`;
@@ -1116,15 +1123,15 @@ const ENTITY_SLUGS = Object.freeze({
           ["Tankat i år", decimal(currentYearData?.litres, "L")]
         ])}
         ${this._overviewExpander("booked", "💳", "Bokförda utgifter", [
-          ["Månad", kroner(nowMonth?.total)],
-          ["År", kroner(currentYearData?.total)]
+          ["Månad", wholeKroner(nowMonth?.total)],
+          ["År", wholeKroner(currentYearData?.total)]
         ], [
           ["Bränsle · månad", kroner(nowMonth?.fuel)],
           ["Övrigt · månad", kroner(nowMonth?.other)],
           ["Bränsle · år", kroner(currentYearData?.fuel)],
           ["Övrigt · år", kroner(currentYearData?.other)]
         ])}
-        ${this._overviewExpander("drivecost", "📏", "Beräknad körkostnad/km", [
+        ${this._overviewExpander("drivecost", "📏", "Körkostnad", [
           ["Månad", decimal(nowMonth?.estimated_total_per_km, "kr/km")],
           ["År", decimal(currentYearData?.estimated_total_per_km, "kr/km")]
         ], [
