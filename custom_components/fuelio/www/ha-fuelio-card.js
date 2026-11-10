@@ -1,4 +1,4 @@
-/* HA-Fuelio Card 2026.11.3b4 — current-tank range calibration and interactive SVG charts. */
+/* HA-Fuelio Card 2026.11.3b5 — current-tank range calibration and interactive SVG charts. */
 (() => {
   "use strict";
   const UI_LANGUAGE = globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "sv-SE";
@@ -146,20 +146,21 @@ const ENTITY_SLUGS = Object.freeze({
     .overview { display:grid; grid-template-columns:1fr; gap:12px; }
     .overview-panel,.range-panel { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; padding:15px; min-width:0; background:var(--card-background-color,#fff); }
     .overview-panel h3,.range-panel h3 { font-size:.98rem; margin:0 0 9px; }
-    .overview-summary-grid { display:grid; grid-template-columns:1fr; gap:12px; min-width:0; }
-    .overview-expander { position:relative; border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
-    .overview-expander.is-open { grid-column:1 / -1; }
-    .overview-expander>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:16px 10px 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; font:inherit; cursor:pointer; min-height:126px; }
-    .overview-expander.is-open>button { min-height:auto; padding-bottom:12px; }
-    .overview-expander>button:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
+    .expander-grid { display:grid; grid-template-columns:1fr; gap:12px; min-width:0; }
+    .overview-expander,.section { position:relative; border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
+    .overview-expander.is-open,.section.is-open,.section-version { grid-column:1 / -1; }
+    .overview-expander>button,.section>button { appearance:none; width:100%; border:0; background:none; color:inherit; padding:14px 28px; display:flex; align-items:center; justify-content:center; gap:8px; text-align:center; font:inherit; font-weight:800; cursor:pointer; min-height:74px; }
+    .overview-expander.is-open>button,.section.is-open>button { min-height:62px; padding-bottom:12px; }
+    .overview-expander>button:focus-visible,.section>button:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
     .overview-expander .overview-title { font-size:.98rem; font-weight:800; min-width:0; text-align:center; }
     .overview-summary { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; color:var(--secondary-text-color,#68727d); text-align:center; }
     .overview-summary>span { min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; }
     .overview-summary-label { font-size:.68rem; line-height:1.2; text-align:center; }
     .overview-summary strong { display:block; color:var(--primary-text-color,#202124); font-size:.86rem; line-height:1.2; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .overview-summary-unit { display:block; color:var(--secondary-text-color,#68727d); font-size:.68rem; line-height:1.2; white-space:nowrap; text-align:center; }
-    .overview-chevron { position:absolute; top:13px; right:15px; font-weight:800; color:var(--secondary-text-color,#68727d); }
+    .overview-chevron,.section-chevron { position:absolute; top:12px; right:14px; font-weight:800; color:var(--secondary-text-color,#68727d); }
     .overview-expander-body { padding:0 15px 14px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
+    .overview-expander-body>.overview-summary { grid-column:1 / -1; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--divider-color,#e2e4e8); }
     .overview-expander .overview-row { flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:4px; }
     .overview-expander .overview-row .note { text-align:center; }
     .overview-expander .overview-row strong { text-align:center; }
@@ -184,10 +185,8 @@ const ENTITY_SLUGS = Object.freeze({
     .fuel-meter>span { display:block; height:100%; border-radius:999px; background:var(--primary-color,#03a9f4); }
     .fuel-meter-note { display:flex; justify-content:space-between; gap:10px; margin-top:6px; color:var(--secondary-text-color,#68727d); font-size:.68rem; }
     .tripbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 14px; margin-top:12px; padding:10px 12px; border:1px solid var(--divider-color,#e2e4e8); border-radius:16px; font-size:.78rem; }
-    .dashboard-grid { display:grid; grid-template-columns:1fr; gap:12px; margin-top:12px; }
-    .section { border:1px solid var(--divider-color,#e2e4e8); border-radius:20px; overflow:hidden; min-width:0; background:var(--card-background-color,#fff); }
-    .section>button { cursor:pointer; display:flex; align-items:center; justify-content:space-between; width:100%; background:none; border:none; color:inherit; padding:14px 16px; text-align:left; font:inherit; font-weight:800; }
-    .section>button:focus-visible,select:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
+    .expander-grid { margin-top:12px; }
+    select:focus-visible { outline:2px solid var(--primary-color,#03a9f4); outline-offset:-2px; }
     .body { padding:0 14px 14px; }
     .section-title { font-weight:800; margin:14px 2px 9px; font-size:.86rem; }
     .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
@@ -252,7 +251,7 @@ const ENTITY_SLUGS = Object.freeze({
     .calibration-buttons button { appearance:none; border:1px solid var(--divider-color,#d4d9df); border-radius:12px; padding:9px 12px; background:var(--secondary-background-color,#f4f5f7); color:inherit; font:inherit; font-weight:800; cursor:pointer; }
     .calibration-buttons .primary { border-color:var(--primary-color,#03a9f4); background:var(--primary-color,#03a9f4); color:var(--text-primary-color,#fff); }
     @container (min-width:340px) {
-      .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .expander-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
     @container (min-width:720px) {
       .shell { padding:22px; }
@@ -270,9 +269,7 @@ const ENTITY_SLUGS = Object.freeze({
       .overview { grid-template-columns:1fr; }
       .range-panel { grid-column:1 / -1; }
       .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .dashboard-grid { grid-template-columns:minmax(0,1.6fr) minmax(340px,.9fr); align-items:start; }
-      .section-costs { grid-row:span 2; }
-      .section-annual,.section-tripstats,.section-records,.section-service,.section-version { grid-column:1 / -1; }
+      .expander-grid { align-items:start; }
       .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
       .section-costs .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     }
@@ -281,7 +278,7 @@ const ENTITY_SLUGS = Object.freeze({
       .overview-panel { grid-column:span 1; }
       .range-panel { grid-column:1 / -1; }
       .overview-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .dashboard-grid { grid-template-columns:minmax(0,1.75fr) minmax(400px,.85fr); }
+      .expander-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .annual-grid { grid-template-columns:repeat(6,minmax(0,1fr)); }
       .annual-columns { grid-template-columns:1.15fr .85fr; gap:18px; }
       .section-records .body { display:grid; grid-template-columns:1fr 1fr; gap:0 18px; }
@@ -351,7 +348,7 @@ const ENTITY_SLUGS = Object.freeze({
         const overviewToggle = event.target.closest?.("[data-overview-section]");
         const overviewSection = overviewToggle?.dataset?.overviewSection;
         if (overviewSection && Object.prototype.hasOwnProperty.call(this._overviewOpen, overviewSection)) {
-          this._overviewOpen[overviewSection] = !this._overviewOpen[overviewSection];
+          this._toggleExpander(overviewSection, "overview");
           this._render();
           return;
         }
@@ -382,7 +379,7 @@ const ENTITY_SLUGS = Object.freeze({
         if (!button) return;
         const section = button.dataset.section;
         if (!Object.prototype.hasOwnProperty.call(this._open, section)) return;
-        this._open[section] = !this._open[section];
+        this._toggleExpander(section, "section");
         this._render();
       });
       this.shadowRoot.addEventListener("keydown", (event) => {
@@ -949,8 +946,25 @@ const ENTITY_SLUGS = Object.freeze({
       return `<section class="overview-panel"><h3>${icon} ${esc(title)}</h3>${rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("")}</section>`;
     }
+    _toggleExpander(id, group) {
+      const currentlyOpen = group === "overview" ? this._overviewOpen[id] : this._open[id];
+      for (const key of Object.keys(this._overviewOpen)) this._overviewOpen[key] = false;
+      for (const key of Object.keys(this._open)) this._open[key] = false;
+      if (!currentlyOpen) (group === "overview" ? this._overviewOpen : this._open)[id] = true;
+    }
+    _hidePartner(id) {
+      const pairs = [
+        ["odometer", "fuel"], ["booked", "drivecost"],
+        ["annual", "tripstats"], ["costs", "fuel-section"],
+        ["records", "service"]
+      ];
+      const active = [...Object.keys(this._overviewOpen).filter(key => this._overviewOpen[key]),
+        ...Object.keys(this._open).filter(key => this._open[key]).map(key => key === "fuel" ? "fuel-section" : key)][0];
+      return pairs.some(([left, right]) => (id === left && active === right) || (id === right && active === left));
+    }
     _overviewExpander(id, icon, title, summaries, rows) {
       const open = this._overviewOpen[id] === true;
+      if (this._hidePartner(id)) return "";
       const summary = summaries.map(([label, value]) => {
         const unit = id === "odometer" ? "km" : id === "fuel" ? "L/100 km" : null;
         const splitUnit = unit && value.endsWith(` ${unit}`);
@@ -959,7 +973,7 @@ const ENTITY_SLUGS = Object.freeze({
       }).join("");
       const body = rows.map(([label, value, note]) =>
         `<div class="overview-row"><span class="name">${esc(label)}</span><strong>${esc(value)}</strong>${note ? `<span class="note">${esc(note)}</span>` : ""}</div>`).join("");
-      return `<section class="overview-expander${open ? " is-open" : ""}"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-summary">${summary}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body">${body}</div>` : ""}</section>`;
+      return `<section class="overview-expander${open ? " is-open" : ""}"><button type="button" data-overview-section="${esc(id)}" aria-expanded="${open}"><span class="overview-title">${icon} ${esc(title)}</span><span class="overview-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div class="overview-expander-body"><div class="overview-summary">${summary}</div>${body}</div>` : ""}</section>`;
     }
     _rangeServiceEntity() {
       return this._resolveId("estimated_range_remaining_km") || this._config?.entity || null;
@@ -1042,8 +1056,9 @@ const ENTITY_SLUGS = Object.freeze({
       </section>`;
     }
     _section(id, icon, title, inner) {
+      if (this._hidePartner(id === "fuel" ? "fuel-section" : id)) return "";
       const open = this._open[id];
-      return `<section class="section section-${id}"><button type="button" data-section="${id}" aria-expanded="${open}" aria-controls="panel-${id}"><span>${icon} ${esc(title)}</span><span aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div id="panel-${id}" class="body">${inner}</div>` : ""}</section>`;
+      return `<section class="section section-${id}${open ? " is-open" : ""}"><button type="button" data-section="${id}" aria-expanded="${open}" aria-controls="panel-${id}"><span>${icon} ${esc(title)}</span><span class="section-chevron" aria-hidden="true">${open ? "⌃" : "⌄"}</span></button>${open ? `<div id="panel-${id}" class="body">${inner}</div>` : ""}</section>`;
     }
     _recordTile(key, title, unit) {
       const entry = this._state(key);
@@ -1103,9 +1118,8 @@ const ENTITY_SLUGS = Object.freeze({
         ${this._kpi("📏", "Körkostnad denna månad", decimal(nowMonth?.estimated_total_per_km, "kr/km"), coverageText(nowMonth), "cost-per-km", nowMonth?.month?.slice(0,4))}
         ${this._kpi("🧭", "Räckvidd kvar", decimal(this._value("estimated_range_remaining_km"), "km"))}
       </div>`;
-      const overview = `<div class="overview">
-        ${this._rangePanel(forecast)}
-        <div class="overview-summary-grid">
+      const overview = `<div class="overview">${this._rangePanel(forecast)}</div>`;
+      const overviewTiles = `
         ${this._overviewExpander("odometer", "🛣️", "Mätarställning", [
           ["Aktuell", decimal(this._value("latest_odometer_km"), "km")],
           ["Månad", decimal(nowMonth?.km, "km")]
@@ -1140,8 +1154,7 @@ const ENTITY_SLUGS = Object.freeze({
           ["Beräknat bränsle · månad", kroner(nowMonth?.estimated_fuel)],
           ["Beräknat bränsle · år", kroner(currentYearData?.estimated_fuel)]
         ])}
-        </div>
-      </div>`;
+`;
       const annual = `<label class="select-label" for="fuelio-year">Visa år</label>
       <select id="fuelio-year" ${allYears.length ? "" : "disabled"}>${allYears.map((row) => `<option value="${esc(String(row.year))}" ${String(row.year) === this._year ? "selected" : ""}>${esc(String(row.year))}</option>`).join("")}</select>
       <div class="section-title annual-hero">Årsrapport · ${esc(this._year || "—")}</div>
@@ -1282,7 +1295,8 @@ const ENTITY_SLUGS = Object.freeze({
         </div>
         ${kpis}
         ${overview}
-        <div class="dashboard-grid">
+        <div class="expander-grid">
+          ${overviewTiles}
           ${this._section("annual", "📊", "Årsöversikt", annual)}
           ${this._section("tripstats", "🚙", "Resestatistik", tripstats)}
           ${this._section("costs", "💳", "Kostnader", costs)}
