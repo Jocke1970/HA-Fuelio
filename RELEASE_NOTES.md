@@ -1,3 +1,17 @@
+# HA-Fuelio 2026.11.3b5 🧩🚙
+
+Unified compact dashboard accordion polish.
+
+- Combine the four overview expanders and seven dashboard sections into one ordered responsive 2-column grid (11 tiles).
+- Show only the icon and centered heading in collapsed tiles, with all details revealed on click.
+- Open exactly one expander at a time; the open panel occupies the full row while its former row partner is hidden (not displaced).
+- Keep Version information as the final always-full-width tile.
+- Retain the six headline KPIs and Tank & range in their existing full-width position above the expander grid.
+- Preserve annual reports, trip statistics, charts, booked/estimated costs, recorded fuel data and calibration semantics.
+- Update and run desktop/mobile regressions in the beta publishing workflow; ensure README, manifest and card versions stay consistent.
+- No backend sensor, entity ID, CSV parser, range forecast or Fuelio source/write-back changes.
+- Stable 2026.11.2 stays on main pending real Home Assistant visual validation.
+
 # HA-Fuelio 2026.11.3b4 🚗📐
 
 Compact overview formatting polish, following the 3b3 2×2 layout fix.
