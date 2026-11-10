@@ -94,6 +94,7 @@ node tests/test_i18n_frontend.mjs
 ```
 
 **Release gate:** changes go to `dev` first, then `beta` for real-HA validation. For HACS prereleases, confirm the actual GitHub prerelease exists and its tag points to the tested commit (a branch version bump alone is insufficient). The root README, developer docs, both bundled card versions, manifest and first release-notes heading must agree with the targeted version. For documentation-only updates, do not retag an existing release. Before stable promotion, align versions and documentation with the intended stable version. After the `beta → main` merge, the normal `main` test workflow must pass; only then may the stable-release workflow tag and publish that exact tested `main` commit. A stale CI result is rejected if `main` has moved meanwhile. Do not promote to `main` based solely on automated tests.
+
 ## Contributors
 
 - **Joachim Eriksson** — project owner, product direction, real Home Assistant validation and release decisions.
