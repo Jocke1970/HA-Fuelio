@@ -49,10 +49,12 @@ add(generic + 'lowest_reported_consumption_this_year', 'consumption_min_year', 5
 // A different vehicle MUST NOT fill in our missing highest year reading.
 add('sensor.other_car_highest_fuel_price_this_year', 'fuel_price_max_year', 99.99, { recorded_on: '2026-01-01' }, 'carB');
 card.hass = { states, entities };
-card._open.records = true;
-card._open.fuel = true;
+card._toggleExpander("records", "section");
 card._render();
-let html = card.shadowRoot.innerHTML;
+const recordHtml = card.shadowRoot.innerHTML;
+card._toggleExpander("fuel", "section");
+card._render();
+let html = recordHtml + "\n" + card.shadowRoot.innerHTML;
 assert.match(html, /Data tillgänglig/);
 assert.match(html, /178\s?593 km/);
 assert.match(html, /5,8 L\/100 km/);
@@ -72,5 +74,7 @@ states[after] = states[before]; entities[after] = { ...entities[before], entity_
 delete states[before]; delete entities[before];
 card.hass = { states, entities };
 assert.equal(card._state('fuel_price_min_year').entity_id, undefined);
+card._toggleExpander("records", "section");
+card._render();
 assert.match(card.shadowRoot.innerHTML, /19,91 kr\/L/);
 console.log('PASS: real name-derived and cross-prefix entity IDs; same-device registry resolution and vehicle isolation');
